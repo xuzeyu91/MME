@@ -1,5 +1,3 @@
-using MME.Domain.Models;
-using MME.Domain.Repositories.ApiRequestLog;
 using MME.Domain.Services;
 using System.Text;
 using System.Text.Json;
@@ -7,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
+using MME.Domain.Repositories;
 
 namespace MME.Domain.Middlewares;
 
@@ -210,7 +209,7 @@ public class ProxyLoggingMiddleware
         return context.Connection.RemoteIpAddress?.ToString() ?? "未知";
     }
 
-    private static async Task<Models.ProxyConfig?> GetProxyConfigFromAuthAsync(HttpContext context, IProxyService proxyService)
+    private static async Task<ProxyConfig?> GetProxyConfigFromAuthAsync(HttpContext context, IProxyService proxyService)
     {
         var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
         if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))

@@ -1,6 +1,6 @@
 using SqlSugar;
 
-namespace MME.Domain.Models;
+namespace MME.Domain.Repositories;
 
 /// <summary>
 /// 代理配置实体

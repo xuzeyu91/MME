@@ -1,5 +1,4 @@
 @page "/proxy-config"
-@using MME.Domain.Models
 @using MME.Domain.Services
 @using AntDesign
 @inject IProxyService ProxyService
@@ -18,7 +17,7 @@
     </PageHeader>
 
     <Card>
-        <Table DataSource="@configs" TItem="MME.Domain.Models.ProxyConfig" Loading="@loading" Bordered>
+        <Table DataSource="@configs" TItem="MME.Domain.Repositories.ProxyConfig" Loading="@loading" Bordered>
             <AntDesign.Column Title="配置名称" DataIndex="Name" TData="string" />
             <AntDesign.Column Title="目标地址" DataIndex="TargetUrl" TData="string">
                 <Text Code>@context.TargetUrl</Text>
@@ -85,11 +84,11 @@
 </Modal>
 
 @code {
-    private List<MME.Domain.Models.ProxyConfig> configs = new();
+    private List<MME.Domain.Repositories.ProxyConfig> configs = new();
     private bool loading = false;
     private bool modalVisible = false;
     private bool modalLoading = false;
-    private MME.Domain.Models.ProxyConfig? editingConfig = null;
+    private MME.Domain.Repositories.ProxyConfig? editingConfig = null;
     private ConfigForm configForm = new();
     private string[] selectedPaths = { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
 
@@ -135,7 +134,7 @@
         modalVisible = true;
     }
 
-    private void ShowEditModal(MME.Domain.Models.ProxyConfig config)
+    private void ShowEditModal(Domain.Repositories.ProxyConfig config)
     {
         editingConfig = config;
         configForm = new ConfigForm

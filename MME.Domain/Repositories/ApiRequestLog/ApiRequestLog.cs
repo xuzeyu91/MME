@@ -1,6 +1,6 @@
 using SqlSugar;
 
-namespace MME.Domain.Models;
+namespace MME.Domain.Repositories;
 
 /// <summary>
 /// API请求日志实体

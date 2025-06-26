@@ -1,4 +1,3 @@
-using MME.Domain.Models;
 using MME.Domain.Repositories.Base;
 using AntSK.Domain.Repositories.Base;
 using SqlSugar;
@@ -6,17 +5,17 @@ using System.Text.Json;
 using MME.Domain.Common.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace MME.Domain.Repositories.ProxyConfig;
+namespace MME.Domain.Repositories;
 
-public interface IProxyConfigRepository : IRepository<Models.ProxyConfig>
+public interface IProxyConfigRepository : IRepository<ProxyConfig>
 {
-    Task<Models.ProxyConfig?> GetByBearerTokenAsync(string bearerToken);
-    Task<List<Models.ProxyConfig>> GetEnabledConfigsAsync();
+    Task<ProxyConfig?> GetByBearerTokenAsync(string bearerToken);
+    Task<List<ProxyConfig>> GetEnabledConfigsAsync();
     Task<string> GenerateUniqueBearerTokenAsync();
 }
 
 [ServiceDescription(typeof(IProxyConfigRepository), ServiceLifetime.Scoped)]
-public class ProxyConfigRepository : Repository<Models.ProxyConfig>, IProxyConfigRepository
+public class ProxyConfigRepository : Repository<ProxyConfig>, IProxyConfigRepository
 {
     public ProxyConfigRepository(ISqlSugarClient db) : base(db)
     {
@@ -25,9 +24,9 @@ public class ProxyConfigRepository : Repository<Models.ProxyConfig>, IProxyConfi
     /// <summary>
     /// 根据Bearer Token获取配置
     /// </summary>
-    public async Task<Models.ProxyConfig?> GetByBearerTokenAsync(string bearerToken)
+    public async Task<ProxyConfig?> GetByBearerTokenAsync(string bearerToken)
     {
-        return await Context.Queryable<Models.ProxyConfig>()
+        return await Context.Queryable<ProxyConfig>()
             .Where(x => x.BearerToken == bearerToken && x.IsEnabled)
             .FirstAsync();
     }
@@ -35,9 +34,9 @@ public class ProxyConfigRepository : Repository<Models.ProxyConfig>, IProxyConfi
     /// <summary>
     /// 获取所有启用的配置
     /// </summary>
-    public async Task<List<Models.ProxyConfig>> GetEnabledConfigsAsync()
+    public async Task<List<ProxyConfig>> GetEnabledConfigsAsync()
     {
-        return await Context.Queryable<Models.ProxyConfig>()
+        return await Context.Queryable<ProxyConfig>()
             .Where(x => x.IsEnabled)
             .ToListAsync();
     }
@@ -53,7 +52,7 @@ public class ProxyConfigRepository : Repository<Models.ProxyConfig>, IProxyConfi
         do
         {
             token = GenerateRandomToken();
-            exists = await Context.Queryable<Models.ProxyConfig>()
+            exists = await Context.Queryable<ProxyConfig>()
                 .Where(x => x.BearerToken == token)
                 .AnyAsync();
         } while (exists);

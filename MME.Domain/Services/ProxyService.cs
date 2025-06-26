@@ -1,5 +1,4 @@
-using MME.Domain.Models;
-using MME.Domain.Repositories.ProxyConfig;
+using MME.Domain.Repositories;
 using MME.Domain.Common.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -7,13 +6,13 @@ namespace MME.Domain.Services;
 
 public interface IProxyService
 {
-    Task<Models.ProxyConfig> CreateConfigAsync(string name, string targetUrl, string apiKey, string? description = null);
-    Task<Models.ProxyConfig> UpdateConfigAsync(long id, string name, string targetUrl, string apiKey, string? description = null);
+    Task<ProxyConfig> CreateConfigAsync(string name, string targetUrl, string apiKey, string? description = null);
+    Task<ProxyConfig> UpdateConfigAsync(long id, string name, string targetUrl, string apiKey, string? description = null);
     Task<bool> DeleteConfigAsync(long id);
     Task<bool> ToggleConfigAsync(long id, bool isEnabled);
-    Task<Models.ProxyConfig?> GetConfigByIdAsync(long id);
-    Task<List<Models.ProxyConfig>> GetAllConfigsAsync();
-    Task<Models.ProxyConfig?> GetConfigByBearerTokenAsync(string bearerToken);
+    Task<ProxyConfig?> GetConfigByIdAsync(long id);
+    Task<List<ProxyConfig>> GetAllConfigsAsync();
+    Task<ProxyConfig?> GetConfigByBearerTokenAsync(string bearerToken);
     Task<string> RefreshBearerTokenAsync(long id);
 }
 
@@ -30,11 +29,11 @@ public class ProxyService : IProxyService
     /// <summary>
     /// 创建代理配置
     /// </summary>
-    public async Task<Models.ProxyConfig> CreateConfigAsync(string name, string targetUrl, string apiKey, string? description = null)
+    public async Task<ProxyConfig> CreateConfigAsync(string name, string targetUrl, string apiKey, string? description = null)
     {
         var bearerToken = await _proxyConfigRepository.GenerateUniqueBearerTokenAsync();
         
-        var config = new Models.ProxyConfig
+        var config = new ProxyConfig
         {
             Name = name,
             TargetUrl = targetUrl.TrimEnd('/'),
@@ -52,7 +51,7 @@ public class ProxyService : IProxyService
     /// <summary>
     /// 更新代理配置
     /// </summary>
-    public async Task<Models.ProxyConfig> UpdateConfigAsync(long id, string name, string targetUrl, string apiKey, string? description = null)
+    public async Task<ProxyConfig> UpdateConfigAsync(long id, string name, string targetUrl, string apiKey, string? description = null)
     {
         var config = await _proxyConfigRepository.GetByIdAsync(id);
         if (config == null)
@@ -94,7 +93,7 @@ public class ProxyService : IProxyService
     /// <summary>
     /// 根据ID获取配置
     /// </summary>
-    public async Task<Models.ProxyConfig?> GetConfigByIdAsync(long id)
+    public async Task<ProxyConfig?> GetConfigByIdAsync(long id)
     {
         return await _proxyConfigRepository.GetByIdAsync(id);
     }
@@ -102,7 +101,7 @@ public class ProxyService : IProxyService
     /// <summary>
     /// 获取所有配置
     /// </summary>
-    public async Task<List<Models.ProxyConfig>> GetAllConfigsAsync()
+    public async Task<List<ProxyConfig>> GetAllConfigsAsync()
     {
         return await _proxyConfigRepository.GetListAsync();
     }
@@ -110,7 +109,7 @@ public class ProxyService : IProxyService
     /// <summary>
     /// 根据Bearer Token获取配置
     /// </summary>
-    public async Task<Models.ProxyConfig?> GetConfigByBearerTokenAsync(string bearerToken)
+    public async Task<ProxyConfig?> GetConfigByBearerTokenAsync(string bearerToken)
     {
         return await _proxyConfigRepository.GetByBearerTokenAsync(bearerToken);
     }

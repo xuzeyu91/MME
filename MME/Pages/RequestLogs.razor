@@ -1,6 +1,5 @@
 @page "/request-logs"
-@using MME.Domain.Models
-@using MME.Domain.Repositories.ApiRequestLog
+@using MME.Domain.Repositories
 @using MME.Domain.Model
 @using AntDesign
 @using SqlSugar
@@ -56,6 +55,26 @@
                             </Select>
                         </SpaceItem>
                         <SpaceItem>
+                            <Select @bind-Value="selectedProxyName" TItemValue="string" TItem="string" Placeholder="选择代理" Style="width: 150px" AllowClear>
+                                <SelectOptions>
+                                    @foreach (var proxy in availableProxyNames)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Label="@proxy" Value="@proxy" />
+                                    }
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedModelName" TItemValue="string" TItem="string" Placeholder="选择模型" Style="width: 180px" AllowClear>
+                                <SelectOptions>
+                                    @foreach (var model in availableModelNames)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Label="@model" Value="@model" />
+                                    }
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
                             <Input @bind-Value="searchPath" Placeholder="搜索路径" Style="width: 200px" />
                         </SpaceItem>
                         <SpaceItem>
@@ -89,6 +108,18 @@
                         {
                             <Tag Color="TagColor.Green" Style="margin-left: 4px;">
                                 状态码：@selectedStatus.Value
+                            </Tag>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(selectedProxyName))
+                        {
+                            <Tag Color="TagColor.Purple" Style="margin-left: 4px;">
+                                代理：@selectedProxyName
+                            </Tag>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(selectedModelName))
+                        {
+                            <Tag Color="TagColor.Cyan" Style="margin-left: 4px;">
+                                模型：@selectedModelName
                             </Tag>
                         }
                         @if (!string.IsNullOrWhiteSpace(searchPath))
@@ -249,11 +280,17 @@
     
     private DateTime[]? dateRange = null;
     private int? selectedStatus = null;
+    private string? selectedProxyName = null;
+    private string? selectedModelName = null;
     private string searchPath = "";
     
     private int currentPage = 1;
     private int pageSize = 20;
     private int totalCount = 0;
+    
+    // 可用的代理名称和模型名称列表
+    private List<string> availableProxyNames = new();
+    private List<string> availableModelNames = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -261,7 +298,26 @@
         var today = DateTime.Today;
         dateRange = new DateTime[] { today.AddDays(-6), today };
         
+        // 加载可用的代理名称和模型名称
+        await LoadAvailableOptions();
+        
         await LoadLogs();
+    }
+
+    private async Task LoadAvailableOptions()
+    {
+        try
+        {
+            // 获取所有可用的代理名称
+            availableProxyNames = await LogRepository.GetDistinctProxyNamesAsync();
+            
+            // 获取所有可用的模型名称
+            availableModelNames = await LogRepository.GetDistinctModelNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"加载筛选选项失败：{ex.Message}");
+        }
     }
 
     private async Task LoadLogs()
@@ -273,65 +329,16 @@
         {
             var page = new SqlSugar.PageModel { PageIndex = currentPage, PageSize = pageSize };
             
-            // 组合所有条件
-            Expression<Func<ApiRequestLog, bool>> whereExpression = log => true;
+            // 构建基本筛选条件
+            Expression<Func<ApiRequestLog, bool>> whereExpression = BuildWhereExpression();
             
-            // 手动组合条件，避免复杂的表达式树操作
-            var hasDateFilter = dateRange != null && dateRange.Length == 2;
-            var hasStatusFilter = selectedStatus.HasValue;
-            var hasPathFilter = !string.IsNullOrWhiteSpace(searchPath);
-            
-            if (hasDateFilter && hasStatusFilter && hasPathFilter)
-            {
-                var startDate = dateRange![0].Date;
-                var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
-                var statusValue = selectedStatus!.Value;
-                var searchValue = searchPath!;
-                whereExpression = log => log.RequestTime >= startDate && log.RequestTime <= endDate && 
-                                       log.ResponseStatusCode == statusValue && 
-                                       log.RequestPath.Contains(searchValue);
-            }
-            else if (hasDateFilter && hasStatusFilter)
-            {
-                var startDate = dateRange![0].Date;
-                var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
-                var statusValue = selectedStatus!.Value;
-                whereExpression = log => log.RequestTime >= startDate && log.RequestTime <= endDate && 
-                                       log.ResponseStatusCode == statusValue;
-            }
-            else if (hasDateFilter && hasPathFilter)
-            {
-                var startDate = dateRange![0].Date;
-                var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
-                var searchValue = searchPath!;
-                whereExpression = log => log.RequestTime >= startDate && log.RequestTime <= endDate && 
-                                       log.RequestPath.Contains(searchValue);
-            }
-            else if (hasStatusFilter && hasPathFilter)
-            {
-                var statusValue = selectedStatus!.Value;
-                var searchValue = searchPath!;
-                whereExpression = log => log.ResponseStatusCode == statusValue && 
-                                       log.RequestPath.Contains(searchValue);
-            }
-            else if (hasDateFilter)
-            {
-                var startDate = dateRange![0].Date;
-                var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
-                whereExpression = log => log.RequestTime >= startDate && log.RequestTime <= endDate;
-            }
-            else if (hasStatusFilter)
-            {
-                var statusValue = selectedStatus!.Value;
-                whereExpression = log => log.ResponseStatusCode == statusValue;
-            }
-            else if (hasPathFilter)
-            {
-                var searchValue = searchPath!;
-                whereExpression = log => log.RequestPath.Contains(searchValue);
-            }
-            
-            var result = await LogRepository.GetLogsWithProxyInfoAsync(whereExpression, page, SqlSugar.OrderByType.Desc);
+            // 使用支持代理名称和模型名称筛选的重载方法
+            var result = await LogRepository.GetLogsWithProxyInfoAsync(
+                whereExpression, 
+                page, 
+                selectedProxyName, 
+                selectedModelName, 
+                SqlSugar.OrderByType.Desc);
             
             logs = result.List;
             totalCount = result.TotalCount;
@@ -347,9 +354,49 @@
         }
     }
 
+    private Expression<Func<ApiRequestLog, bool>> BuildWhereExpression()
+    {
+        Expression<Func<ApiRequestLog, bool>> whereExpression = log => true;
+        
+        // 日期筛选
+        if (dateRange != null && dateRange.Length == 2)
+        {
+            var startDate = dateRange[0].Date;
+            var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
+            whereExpression = CombineExpressions(whereExpression, log => log.RequestTime >= startDate && log.RequestTime <= endDate);
+        }
+        
+        // 状态码筛选
+        if (selectedStatus.HasValue)
+        {
+            var statusValue = selectedStatus.Value;
+            whereExpression = CombineExpressions(whereExpression, log => log.ResponseStatusCode == statusValue);
+        }
+        
+        // 路径筛选
+        if (!string.IsNullOrWhiteSpace(searchPath))
+        {
+            var searchValue = searchPath;
+            whereExpression = CombineExpressions(whereExpression, log => log.RequestPath.Contains(searchValue));
+        }
+        
+        return whereExpression;
+    }
+
+    private Expression<Func<ApiRequestLog, bool>> CombineExpressions(Expression<Func<ApiRequestLog, bool>> first, Expression<Func<ApiRequestLog, bool>> second)
+    {
+        var parameter = Expression.Parameter(typeof(ApiRequestLog), "log");
+        var body = Expression.AndAlso(
+            Expression.Invoke(first, parameter),
+            Expression.Invoke(second, parameter)
+        );
+        return Expression.Lambda<Func<ApiRequestLog, bool>>(body, parameter);
+    }
+
     private async Task RefreshLogs()
     {
         currentPage = 1;
+        await LoadAvailableOptions(); // 重新加载筛选选项
         await LoadLogs();
     }
 
@@ -405,6 +452,8 @@
         // 重置所有筛选条件
         dateRange = null;
         selectedStatus = null;
+        selectedProxyName = null;
+        selectedModelName = null;
         searchPath = "";
         
         StateHasChanged();
@@ -415,6 +464,8 @@
     {
         return (dateRange != null && dateRange.Length == 2) || 
                selectedStatus.HasValue || 
+               !string.IsNullOrWhiteSpace(selectedProxyName) ||
+               !string.IsNullOrWhiteSpace(selectedModelName) ||
                !string.IsNullOrWhiteSpace(searchPath);
     }
 

@@ -1,4 +1,3 @@
-using MME.Domain.Models;
 using MME.Domain.Repositories.Base;
 using AntSK.Domain.Repositories.Base;
 using MME.Domain.Model;
@@ -7,21 +6,29 @@ using MME.Domain.Common.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
-namespace MME.Domain.Repositories.ApiRequestLog;
+namespace MME.Domain.Repositories;
 
-public interface IApiRequestLogRepository : IRepository<Models.ApiRequestLog>
+public interface IApiRequestLogRepository : IRepository<ApiRequestLog>
 {
-    Task<PageList<Models.ApiRequestLog>> GetLogsByProxyConfigIdAsync(long proxyConfigId, PageModel page);
-    Task<List<Models.ApiRequestLog>> GetRecentLogsAsync(int count = 100);
-    Task<Models.ApiRequestLog?> GetByRequestIdAsync(string requestId);
+    Task<PageList<ApiRequestLog>> GetLogsByProxyConfigIdAsync(long proxyConfigId, PageModel page);
+    Task<List<ApiRequestLog>> GetRecentLogsAsync(int count = 100);
+    Task<ApiRequestLog?> GetByRequestIdAsync(string requestId);
     Task<PageList<ApiRequestLogDto>> GetLogsWithProxyInfoAsync(
-        System.Linq.Expressions.Expression<Func<Models.ApiRequestLog, bool>> whereExpression,
+        System.Linq.Expressions.Expression<Func<ApiRequestLog, bool>> whereExpression,
         PageModel page,
         OrderByType orderByType = OrderByType.Desc);
+    Task<PageList<ApiRequestLogDto>> GetLogsWithProxyInfoAsync(
+        System.Linq.Expressions.Expression<Func<ApiRequestLog, bool>> whereExpression,
+        PageModel page,
+        string? proxyName = null,
+        string? modelName = null,
+        OrderByType orderByType = OrderByType.Desc);
+    Task<List<string>> GetDistinctProxyNamesAsync();
+    Task<List<string>> GetDistinctModelNamesAsync();
 }
 
 [ServiceDescription(typeof(IApiRequestLogRepository), ServiceLifetime.Scoped)]
-public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiRequestLogRepository
+public class ApiRequestLogRepository : Repository<ApiRequestLog>, IApiRequestLogRepository
 {
     public ApiRequestLogRepository(ISqlSugarClient db) : base(db)
     {
@@ -30,7 +37,7 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
     /// <summary>
     /// 根据代理配置ID获取日志分页数据
     /// </summary>
-    public async Task<PageList<Models.ApiRequestLog>> GetLogsByProxyConfigIdAsync(long proxyConfigId, PageModel page)
+    public async Task<PageList<ApiRequestLog>> GetLogsByProxyConfigIdAsync(long proxyConfigId, PageModel page)
     {
         return await GetPageListAsync(x => x.ProxyConfigId == proxyConfigId, page, x => x.RequestTime, OrderByType.Desc);
     }
@@ -38,9 +45,9 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
     /// <summary>
     /// 获取最近的日志记录
     /// </summary>
-    public async Task<List<Models.ApiRequestLog>> GetRecentLogsAsync(int count = 100)
+    public async Task<List<ApiRequestLog>> GetRecentLogsAsync(int count = 100)
     {
-        return await Context.Queryable<Models.ApiRequestLog>()
+        return await Context.Queryable<ApiRequestLog>()
             .OrderByDescending(x => x.RequestTime)
             .Take(count)
             .ToListAsync();
@@ -49,9 +56,9 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
     /// <summary>
     /// 根据请求ID获取日志
     /// </summary>
-    public async Task<Models.ApiRequestLog?> GetByRequestIdAsync(string requestId)
+    public async Task<ApiRequestLog?> GetByRequestIdAsync(string requestId)
     {
-        return await Context.Queryable<Models.ApiRequestLog>()
+        return await Context.Queryable<ApiRequestLog>()
             .Where(x => x.RequestId == requestId)
             .FirstAsync();
     }
@@ -60,11 +67,11 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
     /// 获取包含代理信息的日志分页数据
     /// </summary>
     public async Task<PageList<ApiRequestLogDto>> GetLogsWithProxyInfoAsync(
-        System.Linq.Expressions.Expression<Func<Models.ApiRequestLog, bool>> whereExpression,
+        System.Linq.Expressions.Expression<Func<ApiRequestLog, bool>> whereExpression,
         PageModel page,
         OrderByType orderByType = OrderByType.Desc)
     {
-        var queryable = Context.Queryable<Models.ApiRequestLog, Models.ProxyConfig>((log, proxy) => new JoinQueryInfos(
+        var queryable = Context.Queryable<ApiRequestLog, ProxyConfig>((log, proxy) => new JoinQueryInfos(
                 JoinType.Left, log.ProxyConfigId == proxy.Id))
             .Where(whereExpression)
             .OrderBy((log, proxy) => log.RequestTime, orderByType)
@@ -111,6 +118,100 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
     }
 
     /// <summary>
+    /// 获取包含代理信息的日志分页数据（支持代理名称和模型名称筛选）
+    /// </summary>
+    public async Task<PageList<ApiRequestLogDto>> GetLogsWithProxyInfoAsync(
+        System.Linq.Expressions.Expression<Func<ApiRequestLog, bool>> whereExpression,
+        PageModel page,
+        string? proxyName = null,
+        string? modelName = null,
+        OrderByType orderByType = OrderByType.Desc)
+    {
+        var queryable = Context.Queryable<ApiRequestLog, ProxyConfig>((log, proxy) => new JoinQueryInfos(
+                JoinType.Left, log.ProxyConfigId == proxy.Id))
+            .Where(whereExpression);
+
+        // 如果指定了代理名称筛选
+        if (!string.IsNullOrWhiteSpace(proxyName))
+        {
+            queryable = queryable.Where((log, proxy) => proxy.Name == proxyName);
+        }
+
+        var resultQueryable = queryable
+            .OrderBy((log, proxy) => log.RequestTime, orderByType)
+            .Select((log, proxy) => new ApiRequestLogDto
+            {
+                Id = log.Id,
+                RequestId = log.RequestId,
+                ProxyConfigId = log.ProxyConfigId,
+                RequestPath = log.RequestPath,
+                Method = log.Method,
+                RequestHeaders = log.RequestHeaders,
+                RequestBody = log.RequestBody,
+                ResponseStatusCode = log.ResponseStatusCode,
+                ResponseHeaders = log.ResponseHeaders,
+                ResponseBody = log.ResponseBody,
+                TargetUrl = log.TargetUrl,
+                RequestTime = log.RequestTime,
+                ResponseTime = log.ResponseTime,
+                Duration = log.Duration,
+                ErrorMessage = log.ErrorMessage,
+                ClientIp = log.ClientIp,
+                UserAgent = log.UserAgent,
+                TokenUsage = log.TokenUsage,
+                ProxyName = proxy.Name ?? "",
+                ModelName = "" // 将在后续处理中从RequestBody解析
+            });
+
+        // 获取总数（模型名称筛选需要在内存中处理）
+        int totalCount;
+        List<ApiRequestLogDto> list;
+
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            // 没有模型名称筛选，可以直接在数据库中计算
+            totalCount = await resultQueryable.CountAsync();
+            list = await resultQueryable.ToPageListAsync(page.PageIndex, page.PageSize);
+        }
+        else
+        {
+            // 有模型名称筛选，需要获取所有数据后在内存中筛选
+            var allData = await resultQueryable.ToListAsync();
+            
+            // 解析模型名称并进行筛选
+            var filteredData = new List<ApiRequestLogDto>();
+            foreach (var log in allData)
+            {
+                log.ModelName = ExtractModelName(log.RequestBody);
+                if (log.ModelName == modelName)
+                {
+                    filteredData.Add(log);
+                }
+            }
+
+            totalCount = filteredData.Count;
+            list = filteredData.Skip((page.PageIndex - 1) * page.PageSize).Take(page.PageSize).ToList();
+        }
+
+        // 对于没有模型名称筛选的数据，解析模型名称
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            foreach (var log in list)
+            {
+                log.ModelName = ExtractModelName(log.RequestBody);
+            }
+        }
+
+        return new PageList<ApiRequestLogDto>
+        {
+            List = list,
+            TotalCount = totalCount,
+            PageIndex = page.PageIndex,
+            PageSize = page.PageSize
+        };
+    }
+
+    /// <summary>
     /// 从请求体中提取模型名称
     /// </summary>
     private static string ExtractModelName(string requestBody)
@@ -134,5 +235,42 @@ public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiReq
         }
 
         return "";
+    }
+
+    /// <summary>
+    /// 获取所有不同的代理名称
+    /// </summary>
+    public async Task<List<string>> GetDistinctProxyNamesAsync()
+    {
+        return await Context.Queryable<ApiRequestLog, ProxyConfig>((log, proxy) => new JoinQueryInfos(
+                JoinType.Left, log.ProxyConfigId == proxy.Id))
+            .Where((log, proxy) => proxy.Name != null && proxy.Name != "")
+            .Select((log, proxy) => proxy.Name)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// 获取所有不同的模型名称
+    /// </summary>
+    public async Task<List<string>> GetDistinctModelNamesAsync()
+    {
+        // 获取所有非空的请求体
+        var requestBodies = await Context.Queryable<ApiRequestLog>()
+            .Where(log => log.RequestBody != null && log.RequestBody != "")
+            .Select(log => log.RequestBody)
+            .ToListAsync();
+
+        var modelNames = new HashSet<string>();
+        foreach (var requestBody in requestBodies)
+        {
+            var modelName = ExtractModelName(requestBody);
+            if (!string.IsNullOrEmpty(modelName))
+            {
+                modelNames.Add(modelName);
+            }
+        }
+
+        return modelNames.OrderBy(x => x).ToList();
     }
 } 

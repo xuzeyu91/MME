@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MME.Domain.Services;
-using MME.Domain.Repositories.ApiRequestLog;
+using MME.Domain.Repositories;
 using MME.Domain.Model;
-using MME.Domain.Models;
 using SqlSugar;
 
 namespace MME.Controllers;
