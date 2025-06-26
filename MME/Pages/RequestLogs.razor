@@ -4,7 +4,7 @@
 @using AntDesign
 @using SqlSugar
 @using System.Linq.Expressions
-@inject IApiRequestLogRepository LogRepository
+@inject MME.Domain.Repositories.IApiRequestLogRepository LogRepository
 @inject IMessageService MessageService
 
 <PageTitle>请求日志</PageTitle>
@@ -356,41 +356,14 @@
 
     private Expression<Func<ApiRequestLog, bool>> BuildWhereExpression()
     {
-        Expression<Func<ApiRequestLog, bool>> whereExpression = log => true;
-        
-        // 日期筛选
-        if (dateRange != null && dateRange.Length == 2)
-        {
-            var startDate = dateRange[0].Date;
-            var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
-            whereExpression = CombineExpressions(whereExpression, log => log.RequestTime >= startDate && log.RequestTime <= endDate);
-        }
-        
-        // 状态码筛选
-        if (selectedStatus.HasValue)
-        {
-            var statusValue = selectedStatus.Value;
-            whereExpression = CombineExpressions(whereExpression, log => log.ResponseStatusCode == statusValue);
-        }
-        
-        // 路径筛选
-        if (!string.IsNullOrWhiteSpace(searchPath))
-        {
-            var searchValue = searchPath;
-            whereExpression = CombineExpressions(whereExpression, log => log.RequestPath.Contains(searchValue));
-        }
-        
-        return whereExpression;
-    }
-
-    private Expression<Func<ApiRequestLog, bool>> CombineExpressions(Expression<Func<ApiRequestLog, bool>> first, Expression<Func<ApiRequestLog, bool>> second)
-    {
-        var parameter = Expression.Parameter(typeof(ApiRequestLog), "log");
-        var body = Expression.AndAlso(
-            Expression.Invoke(first, parameter),
-            Expression.Invoke(second, parameter)
-        );
-        return Expression.Lambda<Func<ApiRequestLog, bool>>(body, parameter);
+        return log => 
+            // 日期筛选
+            (dateRange == null || dateRange.Length != 2 || 
+             (log.RequestTime >= dateRange[0].Date && log.RequestTime <= dateRange[1].Date.AddDays(1).AddTicks(-1))) &&
+            // 状态码筛选
+            (!selectedStatus.HasValue || log.ResponseStatusCode == selectedStatus.Value) &&
+            // 路径筛选
+            (string.IsNullOrWhiteSpace(searchPath) || log.RequestPath.Contains(searchPath));
     }
 
     private async Task RefreshLogs()

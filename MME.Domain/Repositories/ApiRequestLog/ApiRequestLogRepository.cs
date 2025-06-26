@@ -169,9 +169,98 @@ public class ApiRequestLogRepository : Repository<ApiRequestLog>, IApiRequestLog
 
         if (string.IsNullOrWhiteSpace(modelName))
         {
-            // 没有模型名称筛选，可以直接在数据库中计算
-            totalCount = await resultQueryable.CountAsync();
-            list = await resultQueryable.ToPageListAsync(page.PageIndex, page.PageSize);
+            // 没有模型名称筛选，使用简化的查询避免SQLite JSON错误
+            try
+            {
+                // 分别计算总数和获取数据，避免复杂的JOIN查询
+                var baseQuery = Context.Queryable<ApiRequestLog>()
+                    .Where(whereExpression);
+                
+                totalCount = await baseQuery.CountAsync();
+                
+                var logs = await baseQuery
+                    .OrderBy(log => log.RequestTime, orderByType)
+                    .Skip((page.PageIndex - 1) * page.PageSize)
+                    .Take(page.PageSize)
+                    .ToListAsync();
+                
+                // 获取相关的代理信息
+                var proxyIds = logs.Select(l => l.ProxyConfigId).Distinct().ToList();
+                var proxies = new Dictionary<long, string>();
+                
+                if (proxyIds.Any())
+                {
+                    var proxyConfigs = await Context.Queryable<ProxyConfig>()
+                        .Where(p => proxyIds.Contains(p.Id))
+                        .ToListAsync();
+                    
+                    proxies = proxyConfigs.ToDictionary(p => p.Id, p => p.Name ?? "");
+                }
+                
+                // 转换为DTO
+                list = logs.Select(log => new ApiRequestLogDto
+                {
+                    Id = log.Id,
+                    RequestId = log.RequestId,
+                    ProxyConfigId = log.ProxyConfigId,
+                    RequestPath = log.RequestPath,
+                    Method = log.Method,
+                    RequestHeaders = log.RequestHeaders,
+                    RequestBody = log.RequestBody,
+                    ResponseStatusCode = log.ResponseStatusCode,
+                    ResponseHeaders = log.ResponseHeaders,
+                    ResponseBody = log.ResponseBody,
+                    TargetUrl = log.TargetUrl,
+                    RequestTime = log.RequestTime,
+                    ResponseTime = log.ResponseTime,
+                    Duration = log.Duration,
+                    ErrorMessage = log.ErrorMessage,
+                    ClientIp = log.ClientIp,
+                    UserAgent = log.UserAgent,
+                    TokenUsage = log.TokenUsage,
+                    ProxyName = proxies.GetValueOrDefault(log.ProxyConfigId, "未知"),
+                    ModelName = "" // 将在后续处理中从RequestBody解析
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                // 如果还是出错，使用最简单的查询
+                Console.WriteLine($"SQL查询错误: {ex.Message}");
+                
+                var fallbackQuery = Context.Queryable<ApiRequestLog>()
+                    .OrderByDescending(log => log.RequestTime);
+                    
+                totalCount = await fallbackQuery.CountAsync();
+                
+                var fallbackList = await fallbackQuery
+                    .Skip((page.PageIndex - 1) * page.PageSize)
+                    .Take(page.PageSize)
+                    .ToListAsync();
+                    
+                list = fallbackList.Select(log => new ApiRequestLogDto
+                {
+                    Id = log.Id,
+                    RequestId = log.RequestId,
+                    ProxyConfigId = log.ProxyConfigId,
+                    RequestPath = log.RequestPath,
+                    Method = log.Method,
+                    RequestHeaders = log.RequestHeaders,
+                    RequestBody = log.RequestBody,
+                    ResponseStatusCode = log.ResponseStatusCode,
+                    ResponseHeaders = log.ResponseHeaders,
+                    ResponseBody = log.ResponseBody,
+                    TargetUrl = log.TargetUrl,
+                    RequestTime = log.RequestTime,
+                    ResponseTime = log.ResponseTime,
+                    Duration = log.Duration,
+                    ErrorMessage = log.ErrorMessage,
+                    ClientIp = log.ClientIp,
+                    UserAgent = log.UserAgent,
+                    TokenUsage = log.TokenUsage,
+                    ProxyName = "未知",
+                    ModelName = ""
+                }).ToList();
+            }
         }
         else
         {
