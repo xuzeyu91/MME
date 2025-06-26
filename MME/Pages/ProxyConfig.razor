@@ -118,7 +118,7 @@
         }
         catch (Exception ex)
         {
-            await MessageService.Error($"加载配置失败：{ex.Message}");
+            _= MessageService.Error($"加载配置失败：{ex.Message}");
         }
         finally
         {
@@ -164,7 +164,7 @@
             string.IsNullOrWhiteSpace(configForm.TargetUrl) || 
             string.IsNullOrWhiteSpace(configForm.ApiKey))
         {
-            await MessageService.Warning("请填写所有必填字段");
+            _ = MessageService.Warning("请填写所有必填字段");
             return;
         }
 
@@ -180,7 +180,7 @@
                     configForm.TargetUrl,
                     configForm.ApiKey,
                     configForm.Description);
-                await MessageService.Success("配置创建成功");
+                _ = MessageService.Success("配置创建成功");
             }
             else
             {
@@ -190,7 +190,7 @@
                     configForm.TargetUrl,
                     configForm.ApiKey,
                     configForm.Description);
-                await MessageService.Success("配置更新成功");
+                _ = MessageService.Success("配置更新成功");
             }
 
             modalVisible = false;
@@ -198,7 +198,7 @@
         }
         catch (Exception ex)
         {
-            await MessageService.Error($"操作失败：{ex.Message}");
+            _ = MessageService.Error($"操作失败：{ex.Message}");
         }
         finally
         {
@@ -219,12 +219,12 @@
         try
         {
             await ProxyService.DeleteConfigAsync(id);
-            await MessageService.Success("配置删除成功");
+            _ = MessageService.Success("配置删除成功");
             await LoadConfigs();
         }
         catch (Exception ex)
         {
-            await MessageService.Error($"删除失败：{ex.Message}");
+             _= MessageService.Error($"删除失败：{ex.Message}");
         }
     }
 
@@ -233,12 +233,12 @@
         try
         {
             await ProxyService.ToggleConfigAsync(id, isEnabled);
-            await MessageService.Success(isEnabled ? "配置已启用" : "配置已禁用");
+             _= MessageService.Success(isEnabled ? "配置已启用" : "配置已禁用");
             await LoadConfigs();
         }
         catch (Exception ex)
         {
-            await MessageService.Error($"操作失败：{ex.Message}");
+             _= MessageService.Error($"操作失败：{ex.Message}");
         }
     }
 
@@ -247,12 +247,12 @@
         try
         {
             var newToken = await ProxyService.RefreshBearerTokenAsync(id);
-            await MessageService.Success("Token刷新成功");
+             _= MessageService.Success("Token刷新成功");
             await LoadConfigs();
         }
         catch (Exception ex)
         {
-            await MessageService.Error($"刷新失败：{ex.Message}");
+             _= MessageService.Error($"刷新失败：{ex.Message}");
         }
     }
 

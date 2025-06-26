@@ -103,4 +103,20 @@ public class ApiRequestLog
     /// </summary>
     [SugarColumn(ColumnDataType = "TEXT")]
     public string? TokenUsage { get; set; }
+}
+
+/// <summary>
+/// API请求日志扩展信息（用于显示列表）
+/// </summary>
+public class ApiRequestLogDto : ApiRequestLog
+{
+    /// <summary>
+    /// 代理配置名称
+    /// </summary>
+    public string ProxyName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 模型名称（从请求体中解析）
+    /// </summary>
+    public string ModelName { get; set; } = string.Empty;
 } 
