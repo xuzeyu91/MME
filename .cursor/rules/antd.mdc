@@ -32,42 +32,10 @@ alwaysApply: false
 </response_format>
 
 <additional_guidance>
+- 项目使用Code First 无需生成sql语句
 - 确保建议符合Blazor和Ant Design Blazor的最佳实践
 - 考虑界面的可维护性、可扩展性和重用性
 - 在保持功能完整的同时，追求简洁高效的实现
 </additional_guidance>
 
-<project_structure>
-AntSK-Business/
-├── src/
-│   ├── AntSK/
-│   │   ├── Components/
-│   │   ├── Controllers/
-│   │   ├── Domain/
-│   │   ├── Layouts/
-│   │   ├── Models/
-│   │   ├── Pages/
-│   │   ├── Services/
-│   │   ├── wwwroot/
-│   │   ├── Program.cs
-│   │   └── appsettings.json
-│   ├── AntSK.AppHost/
-│   ├── AntSK.BlazorDiagram/
-│   ├── AntSK.Domain/
-│   │   ├── Common/
-│   │   ├── Domain/
-│   │   ├── Options/
-│   │   │   ├── GraphDBConnectionOption.cs
-│   │   │   ├── GraphOpenAIOption.cs
-│   │   │   ├── GraphSearchOption.cs
-│   │   │   └── GraphSysOption.cs
-│   │   ├── Repositories/
-│   │   └── Utils/
-│   ├── AntSK.Evaluation/
-│   ├── AntSK.LLM/
-│   ├── AntSK.LLamaFactory/
-│   ├── AntSK.OCR/
-│   ├── AntSK.OfflineAuthForm/
-│   └── AntSK.ServiceDefaults/
-</project_structure>
 

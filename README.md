@@ -10,3 +10,4 @@ MME – Model Monitoring & Evaluation
 给输出结果加标签，沉淀高质量数据集
 LangChain 等侧重“编排”，W&B 更关注“训练”，缺少一个专门做“监控 + 评测 + 标注”的轻量平台。
 MME 目标：像加日志框架一样简单地给任何 .NET 应用插上 LLM 可观测性与评测能力。
+
