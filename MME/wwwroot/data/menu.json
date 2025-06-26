@@ -4,5 +4,17 @@
     "name": "对话",
     "key": "chat",
     "icon": "wechat"
+  },
+  {
+    "path": "/proxy-config",
+    "name": "代理配置",
+    "key": "proxy-config",
+    "icon": "setting"
+  },
+  {
+    "path": "/request-logs",
+    "name": "请求日志",
+    "key": "request-logs",
+    "icon": "file-text"
   }
 ]

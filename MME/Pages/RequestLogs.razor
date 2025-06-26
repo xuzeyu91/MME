@@ -1,0 +1,310 @@
+@page "/request-logs"
+@using MME.Domain.Models
+@using MME.Domain.Repositories.ApiRequestLog
+@using MME.Domain.Model
+@using AntDesign
+@using SqlSugar
+@inject IApiRequestLogRepository LogRepository
+@inject IMessageService MessageService
+
+<PageTitle>请求日志</PageTitle>
+
+<div class="page-container">
+    <PageHeader Title="API请求日志" SubTitle="查看所有API请求的详细日志信息">
+        <PageHeaderExtra>
+            <Button Type="@ButtonType.Default" Icon="reload" OnClick="RefreshLogs">
+                刷新
+            </Button>
+        </PageHeaderExtra>
+    </PageHeader>
+
+    <Card>
+        <div style="margin-bottom: 16px;">
+            <Space>
+                <SpaceItem>
+                    <RangePicker @bind-Value="dateRange" Placeholder="@(new[] { "开始日期", "结束日期" })" />
+                </SpaceItem>
+                <SpaceItem>
+                    <Select @bind-Value="selectedStatus" TItemValue="int?" TItem="int" Placeholder="选择状态码" Style="width: 120px" AllowClear>
+                        <SelectOptions>
+                            <SelectOption TItemValue="int?" TItem="int" Label="200" Value="200" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="400" Value="400" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="401" Value="401" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="403" Value="403" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="404" Value="404" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="500" Value="500" />
+                        </SelectOptions>
+                    </Select>
+                </SpaceItem>
+                <SpaceItem>
+                    <Input @bind-Value="searchPath" Placeholder="搜索路径" Style="width: 200px" />
+                </SpaceItem>
+                <SpaceItem>
+                    <Button Type="@ButtonType.Primary" Icon="search" OnClick="SearchLogs">
+                        搜索
+                    </Button>
+                </SpaceItem>
+            </Space>
+        </div>
+
+        <Table DataSource="@logs" TItem="ApiRequestLog" Loading="@loading" 
+               Bordered Size="@TableSize.Small" Scroll="new TableScroll { X = "1200px" }">
+            <AntDesign.Column Title="请求时间" DataIndex="RequestTime" TData="DateTime" Width="160">
+                @context.RequestTime.ToString("MM-dd HH:mm:ss")
+            </AntDesign.Column>
+            <AntDesign.Column Title="方法" DataIndex="Method" TData="string" Width="80">
+                <Tag Color="@GetMethodColor(context.Method)">@context.Method</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="路径" DataIndex="RequestPath" TData="string" Width="200">
+                <Text Code>@context.RequestPath</Text>
+            </AntDesign.Column>
+            <AntDesign.Column Title="状态码" DataIndex="ResponseStatusCode" TData="int" Width="80">
+                <Tag Color="@GetStatusColor(context.ResponseStatusCode)">@context.ResponseStatusCode</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="耗时" DataIndex="Duration" TData="long" Width="80">
+                @($"{context.Duration}ms")
+            </AntDesign.Column>
+            <AntDesign.Column Title="客户端IP" DataIndex="ClientIp" TData="string" Width="120">
+                @context.ClientIp
+            </AntDesign.Column>
+            <AntDesign.Column Title="Token使用" DataIndex="TokenUsage" TData="string" Width="120">
+                @if (!string.IsNullOrEmpty(context.TokenUsage))
+                {
+                    var usage = ParseTokenUsage(context.TokenUsage);
+                    <Text>@usage</Text>
+                }
+            </AntDesign.Column>
+            <ActionColumn Title="操作" Width="120">
+                <Space>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                OnClick="() => ShowLogDetail(context)">
+                            详情
+                        </Button>
+                    </SpaceItem>
+                </Space>
+            </ActionColumn>
+        </Table>
+
+        <div style="margin-top: 16px; text-align: right;">
+            <Pagination Current="@currentPage" 
+                       Total="@totalCount" 
+                       PageSize="@pageSize" 
+                       ShowSizeChanger
+                       OnChange="OnPageChange"
+                       OnShowSizeChange="OnPageSizeChange" />
+        </div>
+    </Card>
+</div>
+
+<!-- 日志详情模态框 -->
+<Modal Title="请求详情" 
+       Visible="@detailModalVisible" 
+       Width="1000"
+       OnCancel="() => detailModalVisible = false"
+       Footer="null">
+    @if (selectedLog != null)
+    {
+        <Tabs DefaultActiveKey="1">
+            <TabPane Key="1" Tab="基本信息">
+                <Descriptions Bordered Column="2">
+                    <DescriptionsItem Title="请求ID">@selectedLog.RequestId</DescriptionsItem>
+                    <DescriptionsItem Title="请求时间">@selectedLog.RequestTime.ToString("yyyy-MM-dd HH:mm:ss")</DescriptionsItem>
+                    <DescriptionsItem Title="响应时间">@(selectedLog.ResponseTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "无")</DescriptionsItem>
+                    <DescriptionsItem Title="耗时">@($"{selectedLog.Duration}ms")</DescriptionsItem>
+                    <DescriptionsItem Title="方法">@selectedLog.Method</DescriptionsItem>
+                    <DescriptionsItem Title="路径">@selectedLog.RequestPath</DescriptionsItem>
+                    <DescriptionsItem Title="状态码">
+                        <Tag Color="@GetStatusColor(selectedLog.ResponseStatusCode)">@selectedLog.ResponseStatusCode</Tag>
+                    </DescriptionsItem>
+                    <DescriptionsItem Title="客户端IP">@selectedLog.ClientIp</DescriptionsItem>
+                    <DescriptionsItem Title="User-Agent" Span="2">@selectedLog.UserAgent</DescriptionsItem>
+                    <DescriptionsItem Title="目标URL" Span="2">@selectedLog.TargetUrl</DescriptionsItem>
+                    @if (!string.IsNullOrEmpty(selectedLog.ErrorMessage))
+                    {
+                        <DescriptionsItem Title="错误信息" Span="2">
+                            <Text Type="@TextElementType.Danger">@selectedLog.ErrorMessage</Text>
+                        </DescriptionsItem>
+                    }
+                </Descriptions>
+            </TabPane>
+            <TabPane Key="2" Tab="请求信息">
+                <div style="margin-bottom: 16px;">
+                    <Title Level="5">请求头</Title>
+                    <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap;">@FormatJson(selectedLog.RequestHeaders)</pre>
+                    </div>
+                </div>
+                <div>
+                    <Title Level="5">请求体</Title>
+                    <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap;">@FormatJson(selectedLog.RequestBody)</pre>
+                    </div>
+                </div>
+            </TabPane>
+            <TabPane Key="3" Tab="响应信息">
+                <div style="margin-bottom: 16px;">
+                    <Title Level="5">响应头</Title>
+                    <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap;">@FormatJson(selectedLog.ResponseHeaders)</pre>
+                    </div>
+                </div>
+                <div>
+                    <Title Level="5">响应体</Title>
+                    <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap;">@FormatJson(selectedLog.ResponseBody)</pre>
+                    </div>
+                </div>
+            </TabPane>
+        </Tabs>
+    }
+</Modal>
+
+@code {
+    private List<ApiRequestLog> logs = new();
+    private bool loading = false;
+    private bool detailModalVisible = false;
+    private ApiRequestLog? selectedLog = null;
+    
+    private DateTime[]? dateRange = null;
+    private int? selectedStatus = null;
+    private string searchPath = "";
+    
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private int totalCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var page = new SqlSugar.PageModel { PageIndex = currentPage, PageSize = pageSize };
+            var result = await LogRepository.GetPageListAsync(x => true, page, x => x.RequestTime, SqlSugar.OrderByType.Desc);
+            
+            logs = result.List;
+            totalCount = result.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            await MessageService.Error($"加载日志失败：{ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshLogs()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task SearchLogs()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task OnPageChange(PaginationEventArgs args)
+    {
+        currentPage = args.Page;
+        await LoadLogs();
+    }
+
+    private async Task OnPageSizeChange(PaginationEventArgs args)
+    {
+        pageSize = args.PageSize;
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private void ShowLogDetail(ApiRequestLog log)
+    {
+        selectedLog = log;
+        detailModalVisible = true;
+    }
+
+    private string GetMethodColor(string method)
+    {
+        return method.ToUpper() switch
+        {
+            "GET" => "blue",
+            "POST" => "green",
+            "PUT" => "orange",
+            "DELETE" => "red",
+            "PATCH" => "purple",
+            _ => "default"
+        };
+    }
+
+    private string GetStatusColor(int status)
+    {
+        return status switch
+        {
+            >= 200 and < 300 => "success",
+            >= 300 and < 400 => "warning",
+            >= 400 and < 500 => "error",
+            >= 500 => "error",
+            _ => "default"
+        };
+    }
+
+    private string ParseTokenUsage(string? tokenUsage)
+    {
+        if (string.IsNullOrEmpty(tokenUsage))
+            return "";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(tokenUsage);
+            var root = doc.RootElement;
+            
+            if (root.TryGetProperty("total_tokens", out var total))
+            {
+                return $"{total.GetInt32()} tokens";
+            }
+        }
+        catch
+        {
+            // 忽略解析错误
+        }
+
+        return "";
+    }
+
+    private string FormatJson(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return "";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch
+        {
+            return json;
+        }
+    }
+}
+
+<style>
+    .page-container {
+        padding: 24px;
+    }
+</style> 

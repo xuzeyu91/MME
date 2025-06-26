@@ -1,7 +1,8 @@
 using MME.Domain;
 using MME.Domain.Common.Extensions;
 using MME.Domain.Common.Options;
-using AntDesign.ProLayout;
+using MME.Domain.Services;
+using MME.Domain.Middlewares;
 using Microsoft.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,16 +11,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddAntDesign();
+builder.Services.AddHttpClient();
 builder.Services.AddScoped(sp => new HttpClient
 {
     BaseAddress = new Uri(sp.GetService<NavigationManager>()!.BaseUri)
 });
-builder.Services.Configure<ProSettings>(builder.Configuration.GetSection("ProSettings"));
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// 添加Yarp反向代理
+builder.Services.AddReverseProxy();
 
 builder.Services.AddServicesFromAssemblies("MME", "MME.Domain");
 
@@ -34,16 +38,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 app.UseStaticFiles();
 
 app.UseRouting();
 
-app.MapBlazorHub();
-
-app.MapFallbackToPage("/_Host");
+// 添加代理日志中间件
+app.UseMiddleware<ProxyLoggingMiddleware>();
 
 app.UseAuthorization();
 
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
 app.MapControllers();
 
 app.CodeFirst();
