@@ -1,0 +1,42 @@
+﻿@namespace MME
+@inherits LayoutComponentBase
+
+<AntDesign.ProLayout.BasicLayout 
+    Logo="@("https://gw.alipayobjects.com/zos/rmsportal/KDpgvguMpGfqaHPjicRK.svg")"
+    MenuData="_menuData">
+    <RightContentRender>
+        <MME.Components.RightContent />
+    </RightContentRender>
+    <ChildContent>
+        @Body
+    </ChildContent>
+    <FooterRender>
+        <FooterView Copyright="MME" Links="Links"></FooterView>
+    </FooterRender>
+</AntDesign.ProLayout.BasicLayout>
+<SettingDrawer />
+
+@code
+{
+    private MenuDataItem[] _menuData = { };
+
+    [Inject] public HttpClient HttpClient { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _menuData = await HttpClient.GetFromJsonAsync<MenuDataItem[]>("data/menu.json");
+    }
+
+
+    public LinkItem[] Links { get; set; } =
+    {
+        // new LinkItem
+        // {
+        //     Key = "MME",
+        //     Title = "MME",
+        //     Href = "",
+        //     BlankTarget = true,
+        // }
+    };
+}

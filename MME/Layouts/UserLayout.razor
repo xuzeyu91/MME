@@ -1,0 +1,36 @@
+﻿@namespace MME
+@using OneOf
+@inherits LayoutComponentBase
+
+<div class="container__b__0">
+    <div class="lang">
+        <!--todo: selectLang-->
+    </div>
+    <div class="content">
+        <div class="top">
+            <div class="header">
+                <a>
+                    <img alt="logo" class="logo" src="assets/logo.svg" />
+                    <span class="title">MME</span>
+                </a>
+            </div>
+            <div class="desc">MME</div>
+        </div>
+        @Body
+    </div>
+    <FooterView Copyright="MME" Links="Links"></FooterView>
+</div>
+
+@code
+{
+    public LinkItem[] Links { get; set; } =
+    {
+        // new LinkItem
+        // {
+        //     Key = "MME",
+        //     Title = "MME",
+        //     Href = "",
+        //     BlankTarget = true,
+        // }
+    };
+}
