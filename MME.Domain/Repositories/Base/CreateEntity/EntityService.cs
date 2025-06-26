@@ -13,7 +13,7 @@ namespace MME.Domain.Repositories
         public SqlSugarClient db = new SqlSugarClient(new ConnectionConfig()
         {
             ConnectionString = DBConnectionOption.ConnectionStrings,
-            DbType = (SqlSugar.DbType)Enum.Parse(typeof(SqlSugar.DbType), DBConnectionOption.DbType),
+            DbType = (SqlSugar.DbType)Enum.Parse(typeof(SqlSugar.DbType), DBConnectionOption.StaticDbType),
             InitKeyType = InitKeyType.Attribute,//从特性读取主键和自增列信息
             IsAutoCloseConnection = true,//开启自动释放模式和EF原理一样我就不多解释了
         });

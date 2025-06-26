@@ -2,14 +2,28 @@
 {
     public class DBConnectionOption
     {
-
         /// <summary>
-        /// sqlite连接字符串
+        /// 数据库类型
         /// </summary>
-        public static string DbType { get; set; }
+        public string DbType { get; set; } = "Sqlite";
+        
         /// <summary>
-        /// pg链接字符串
+        /// 数据库连接字符串
         /// </summary>
-        public static string ConnectionStrings { get; set; }
+        public string DBConnection { get; set; } = "";
+        
+        /// <summary>
+        /// 向量数据库连接字符串
+        /// </summary>
+        public string VectorConnection { get; set; } = "";
+        
+        /// <summary>
+        /// 向量大小
+        /// </summary>
+        public int VectorSize { get; set; } = 1536;
+        
+        // 保持静态属性用于向后兼容
+        public static string StaticDbType { get; set; } = "Sqlite";
+        public static string ConnectionStrings { get; set; } = "";
     }
 }

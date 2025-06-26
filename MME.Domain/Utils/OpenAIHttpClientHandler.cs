@@ -15,7 +15,7 @@ namespace MME.Domain.Utils
         {
             UriBuilder uriBuilder;
             Regex regex = new Regex(@"(https?)://([^/:]+)(:\d+)?/(.*)");
-            Match match = regex.Match(OpenAIOption.EndPoint);
+            Match match = regex.Match(OpenAIOption.StaticEndPoint);
 
             var mediaType = request.Content.Headers.ContentType.MediaType;
             string requestBody = (await request.Content.ReadAsStringAsync()).Unescape();

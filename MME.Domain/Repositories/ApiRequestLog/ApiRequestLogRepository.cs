@@ -3,6 +3,8 @@ using MME.Domain.Repositories.Base;
 using AntSK.Domain.Repositories.Base;
 using MME.Domain.Model;
 using SqlSugar;
+using MME.Domain.Common.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MME.Domain.Repositories.ApiRequestLog;
 
@@ -13,6 +15,7 @@ public interface IApiRequestLogRepository : IRepository<Models.ApiRequestLog>
     Task<Models.ApiRequestLog?> GetByRequestIdAsync(string requestId);
 }
 
+[ServiceDescription(typeof(IApiRequestLogRepository), ServiceLifetime.Scoped)]
 public class ApiRequestLogRepository : Repository<Models.ApiRequestLog>, IApiRequestLogRepository
 {
     public ApiRequestLogRepository(ISqlSugarClient db) : base(db)

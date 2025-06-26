@@ -3,6 +3,8 @@ using MME.Domain.Repositories.Base;
 using AntSK.Domain.Repositories.Base;
 using SqlSugar;
 using System.Text.Json;
+using MME.Domain.Common.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MME.Domain.Repositories.ProxyConfig;
 
@@ -13,6 +15,7 @@ public interface IProxyConfigRepository : IRepository<Models.ProxyConfig>
     Task<string> GenerateUniqueBearerTokenAsync();
 }
 
+[ServiceDescription(typeof(IProxyConfigRepository), ServiceLifetime.Scoped)]
 public class ProxyConfigRepository : Repository<Models.ProxyConfig>, IProxyConfigRepository
 {
     public ProxyConfigRepository(ISqlSugarClient db) : base(db)

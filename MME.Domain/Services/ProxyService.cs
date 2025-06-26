@@ -1,5 +1,7 @@
 using MME.Domain.Models;
 using MME.Domain.Repositories.ProxyConfig;
+using MME.Domain.Common.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MME.Domain.Services;
 
@@ -15,6 +17,7 @@ public interface IProxyService
     Task<string> RefreshBearerTokenAsync(long id);
 }
 
+[ServiceDescription(typeof(IProxyService), ServiceLifetime.Scoped)]
 public class ProxyService : IProxyService
 {
     private readonly IProxyConfigRepository _proxyConfigRepository;

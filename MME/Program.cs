@@ -25,10 +25,14 @@ builder.Services.AddSwaggerGen();
 // 添加Yarp反向代理
 builder.Services.AddReverseProxy();
 
+// 添加 SqlSugar 数据库服务
+builder.Services.AddSqlSugar(builder.Configuration);
+
 builder.Services.AddServicesFromAssemblies("MME", "MME.Domain");
 
-builder.Configuration.GetSection("DBConnection").Get<DBConnectionOption>();
-builder.Configuration.GetSection("OpenAI").Get<OpenAIOption>();
+// 绑定配置选项
+builder.Services.Configure<DBConnectionOption>(builder.Configuration.GetSection("DBConnection"));
+builder.Services.Configure<OpenAIOption>(builder.Configuration.GetSection("OpenAI"));
 
 var app = builder.Build();
 
