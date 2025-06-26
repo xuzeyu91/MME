@@ -195,8 +195,8 @@
             // 日期范围筛选
             if (dateRange != null && dateRange.Length == 2)
             {
-                var startDate = dateRange[0];
-                var endDate = dateRange[1].AddDays(1);
+                var startDate = dateRange[0].Date; // 选定开始日期的00:00:00
+                var endDate = dateRange[1].Date.AddDays(1); // 选定结束日期的次日00:00:00
                 conditions.Add(x => x.RequestTime >= startDate && x.RequestTime < endDate);
             }
             
@@ -232,8 +232,8 @@
                     
                     if (hasDateFilter && hasStatusFilter && hasPathFilter)
                     {
-                        var startDate = dateRange![0];
-                        var endDate = dateRange[1].AddDays(1);
+                        var startDate = dateRange![0].Date;
+                        var endDate = dateRange[1].Date.AddDays(1);
                         var statusValue = selectedStatus!.Value;
                         var searchValue = searchPath!;
                         whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
@@ -242,16 +242,16 @@
                     }
                     else if (hasDateFilter && hasStatusFilter)
                     {
-                        var startDate = dateRange![0];
-                        var endDate = dateRange[1].AddDays(1);
+                        var startDate = dateRange![0].Date;
+                        var endDate = dateRange[1].Date.AddDays(1);
                         var statusValue = selectedStatus!.Value;
                         whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
                                              x.ResponseStatusCode == statusValue;
                     }
                     else if (hasDateFilter && hasPathFilter)
                     {
-                        var startDate = dateRange![0];
-                        var endDate = dateRange[1].AddDays(1);
+                        var startDate = dateRange![0].Date;
+                        var endDate = dateRange[1].Date.AddDays(1);
                         var searchValue = searchPath!;
                         whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
                                              x.RequestPath.Contains(searchValue);
