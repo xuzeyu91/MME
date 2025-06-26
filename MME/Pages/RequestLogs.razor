@@ -4,6 +4,7 @@
 @using MME.Domain.Model
 @using AntDesign
 @using SqlSugar
+@using System.Linq.Expressions
 @inject IApiRequestLogRepository LogRepository
 @inject IMessageService MessageService
 
@@ -48,7 +49,7 @@
         </div>
 
         <Table DataSource="@logs" TItem="ApiRequestLog" Loading="@loading" 
-               Bordered Size="@TableSize.Small" Scroll="new TableScroll { X = "1200px" }">
+               Bordered Size="@TableSize.Small" ScrollX="1200px">
             <AntDesign.Column Title="请求时间" DataIndex="RequestTime" TData="DateTime" Width="160">
                 @context.RequestTime.ToString("MM-dd HH:mm:ss")
             </AntDesign.Column>
@@ -187,7 +188,85 @@
         try
         {
             var page = new SqlSugar.PageModel { PageIndex = currentPage, PageSize = pageSize };
-            var result = await LogRepository.GetPageListAsync(x => true, page, x => x.RequestTime, SqlSugar.OrderByType.Desc);
+            
+            // 使用条件构建器
+            var conditions = new List<Expression<Func<ApiRequestLog, bool>>>();
+            
+            // 日期范围筛选
+            if (dateRange != null && dateRange.Length == 2)
+            {
+                var startDate = dateRange[0];
+                var endDate = dateRange[1].AddDays(1);
+                conditions.Add(x => x.RequestTime >= startDate && x.RequestTime < endDate);
+            }
+            
+            // 状态码筛选
+            if (selectedStatus.HasValue)
+            {
+                var statusValue = selectedStatus.Value;
+                conditions.Add(x => x.ResponseStatusCode == statusValue);
+            }
+            
+            // 路径搜索
+            if (!string.IsNullOrWhiteSpace(searchPath))
+            {
+                var searchValue = searchPath;
+                conditions.Add(x => x.RequestPath.Contains(searchValue));
+            }
+            
+            // 组合所有条件
+            Expression<Func<ApiRequestLog, bool>> whereExpression = x => true;
+            if (conditions.Count > 0)
+            {
+                // 使用简单的方式直接构建最终表达式
+                if (conditions.Count == 1)
+                {
+                    whereExpression = conditions[0];
+                }
+                else
+                {
+                    // 手动组合条件，避免复杂的表达式树操作
+                    var hasDateFilter = dateRange != null && dateRange.Length == 2;
+                    var hasStatusFilter = selectedStatus.HasValue;
+                    var hasPathFilter = !string.IsNullOrWhiteSpace(searchPath);
+                    
+                    if (hasDateFilter && hasStatusFilter && hasPathFilter)
+                    {
+                        var startDate = dateRange![0];
+                        var endDate = dateRange[1].AddDays(1);
+                        var statusValue = selectedStatus!.Value;
+                        var searchValue = searchPath!;
+                        whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
+                                             x.ResponseStatusCode == statusValue && 
+                                             x.RequestPath.Contains(searchValue);
+                    }
+                    else if (hasDateFilter && hasStatusFilter)
+                    {
+                        var startDate = dateRange![0];
+                        var endDate = dateRange[1].AddDays(1);
+                        var statusValue = selectedStatus!.Value;
+                        whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
+                                             x.ResponseStatusCode == statusValue;
+                    }
+                    else if (hasDateFilter && hasPathFilter)
+                    {
+                        var startDate = dateRange![0];
+                        var endDate = dateRange[1].AddDays(1);
+                        var searchValue = searchPath!;
+                        whereExpression = x => x.RequestTime >= startDate && x.RequestTime < endDate && 
+                                             x.RequestPath.Contains(searchValue);
+                    }
+                    else if (hasStatusFilter && hasPathFilter)
+                    {
+                        var statusValue = selectedStatus!.Value;
+                        var searchValue = searchPath!;
+                        whereExpression = x => x.ResponseStatusCode == statusValue && 
+                                             x.RequestPath.Contains(searchValue);
+                    }
+                }
+            }
+            
+            var result = await LogRepository.GetPageListAsync(whereExpression, page, x => x.RequestTime, SqlSugar.OrderByType.Desc);
             
             logs = result.List;
             totalCount = result.TotalCount;
