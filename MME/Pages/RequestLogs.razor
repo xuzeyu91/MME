@@ -5,6 +5,7 @@
 @using SqlSugar
 @using System.Linq.Expressions
 @inject MME.Domain.Repositories.IApiRequestLogRepository LogRepository
+@inject MME.Domain.Services.IProxyService ProxyService
 @inject IMessageService MessageService
 
 <PageTitle>请求日志</PageTitle>
@@ -329,15 +330,32 @@
         {
             var page = new SqlSugar.PageModel { PageIndex = currentPage, PageSize = pageSize };
             
-            // 构建基本筛选条件
-            Expression<Func<ApiRequestLog, bool>> whereExpression = BuildWhereExpression();
+            // 如果选择了代理名称，先获取对应的ProxyConfigId
+            long? selectedProxyConfigId = null;
+            if (!string.IsNullOrWhiteSpace(selectedProxyName))
+            {
+                try
+                {
+                    // 注入ProxyService来查询代理配置
+                    var allConfigs = await ProxyService.GetAllConfigsAsync();
+                    var selectedConfig = allConfigs.FirstOrDefault(c => c.Name == selectedProxyName);
+                    selectedProxyConfigId = selectedConfig?.Id;
+                }
+                catch (Exception ex)
+                {
+                    _ = MessageService.Warning($"查询代理配置失败：{ex.Message}");
+                }
+            }
             
-            // 使用支持代理名称和模型名称筛选的重载方法
+            // 构建完整的筛选条件（包括ProxyConfigId筛选）
+            Expression<Func<ApiRequestLog, bool>> whereExpression = BuildWhereExpression(selectedProxyConfigId);
+            
+            // 使用简化的Repository方法，只需要处理模型名称筛选
             var result = await LogRepository.GetLogsWithProxyInfoAsync(
                 whereExpression, 
                 page, 
-                selectedProxyName, 
-                selectedModelName, 
+                null, // 代理名称筛选已在表达式中处理
+                selectedModelName, // 只有模型名称筛选还需要在Repository层处理
                 SqlSugar.OrderByType.Desc);
             
             logs = result.List;
@@ -354,7 +372,7 @@
         }
     }
 
-    private Expression<Func<ApiRequestLog, bool>> BuildWhereExpression()
+    private Expression<Func<ApiRequestLog, bool>> BuildWhereExpression(long? proxyConfigId = null)
     {
         // 使用 SqlSugar 推荐的 Expressionable 方式构建动态表达式
         var exp = SqlSugar.Expressionable.Create<ApiRequestLog>();
@@ -378,6 +396,15 @@
         {
             exp = exp.And(log => log.RequestPath.Contains(searchPath));
         }
+        
+        // 代理配置ID筛选（根据选择的代理名称转换而来）
+        if (proxyConfigId.HasValue)
+        {
+            exp = exp.And(log => log.ProxyConfigId == proxyConfigId.Value);
+        }
+        
+        // 注意：模型名称筛选由于需要从RequestBody的JSON中解析，
+        // 仍然在Repository层的GetLogsWithProxyInfoAsync方法中处理
         
         return exp.ToExpression();
     }
