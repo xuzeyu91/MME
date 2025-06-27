@@ -106,6 +106,9 @@ public class OpenAIProxyController : ControllerBase
                 requestBody = await reader.ReadToEndAsync();
             }
 
+            // 检查是否为流式请求
+            bool isStreamRequest = IsStreamRequest(requestBody);
+
             // 创建代理请求
             var request = new HttpRequestMessage(new HttpMethod(Request.Method), targetUrl);
 
@@ -133,10 +136,7 @@ public class OpenAIProxyController : ControllerBase
             }
 
             // 发送请求
-            var response = await httpClient.SendAsync(request);
-
-            // 读取响应内容
-            var responseContent = await response.Content.ReadAsStringAsync();
+            var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
             // 复制响应头
             foreach (var header in response.Headers)
@@ -155,13 +155,33 @@ public class OpenAIProxyController : ControllerBase
                 }
             }
 
-            // 返回响应
-            return new ContentResult
+            // 设置状态码
+            Response.StatusCode = (int)response.StatusCode;
+
+            // 如果是流式请求，则实时转发数据流
+            if (isStreamRequest)
             {
-                Content = responseContent,
-                ContentType = response.Content.Headers.ContentType?.ToString() ?? "application/json",
-                StatusCode = (int)response.StatusCode
-            };
+                Response.ContentType = response.Content.Headers.ContentType?.ToString() ?? "text/plain";
+                
+                // 实时转发流式数据
+                using var responseStream = await response.Content.ReadAsStreamAsync();
+                await responseStream.CopyToAsync(Response.Body);
+                await Response.Body.FlushAsync();
+                
+                return new EmptyResult();
+            }
+            else
+            {
+                // 非流式请求，读取完整响应内容
+                var responseContent = await response.Content.ReadAsStringAsync();
+                
+                return new ContentResult
+                {
+                    Content = responseContent,
+                    ContentType = response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                    StatusCode = (int)response.StatusCode
+                };
+            }
         }
         catch (HttpRequestException ex)
         {
@@ -178,6 +198,30 @@ public class OpenAIProxyController : ControllerBase
             _logger.LogError(ex, "Unexpected error for path: {Path}", targetPath);
             return StatusCode(500, new { error = "Internal server error", message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// 检查请求是否为流式请求
+    /// </summary>
+    private static bool IsStreamRequest(string requestBody)
+    {
+        if (string.IsNullOrEmpty(requestBody))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(requestBody);
+            if (document.RootElement.TryGetProperty("stream", out var streamProperty))
+            {
+                return streamProperty.GetBoolean();
+            }
+        }
+        catch
+        {
+            // 解析失败，默认为非流式
+        }
+
+        return false;
     }
 
     private static bool ShouldSkipHeader(string headerName)

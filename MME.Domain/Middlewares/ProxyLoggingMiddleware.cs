@@ -41,78 +41,66 @@ public class ProxyLoggingMiddleware
         // 获取客户端IP
         var clientIp = GetClientIpAddress(context);
 
-        // 包装响应流以便记录响应内容
-        var originalResponseBody = context.Response.Body;
-        using var responseBodyStream = new MemoryStream();
-        context.Response.Body = responseBodyStream;
+        // 检查是否为流式请求
+        bool isStreamRequest = IsStreamRequest(requestBody);
 
         ApiRequestLog? logEntry = null;
         
-        try
+        if (isStreamRequest)
         {
-            // 执行下一个中间件
-            await _next(context);
-            
-            stopwatch.Stop();
-
-            // 读取响应内容
-            responseBodyStream.Seek(0, SeekOrigin.Begin);
-            var responseBody = await new StreamReader(responseBodyStream).ReadToEndAsync();
-            var responseHeaders = SerializeHeaders(context.Response.Headers);
-
-            // 创建日志条目
-            using var scope = _serviceProvider.CreateScope();
-            var logRepository = scope.ServiceProvider.GetRequiredService<IApiRequestLogRepository>();
-            var proxyService = scope.ServiceProvider.GetRequiredService<IProxyService>();
-            
-            // 尝试根据Authorization头获取代理配置
-            var proxyConfig = await GetProxyConfigFromAuthAsync(context, proxyService);
-            var proxyConfigId = proxyConfig?.Id ?? 0;
-
-            logEntry = new ApiRequestLog
+            // 流式请求：不缓存响应体，直接转发
+            try
             {
-                RequestId = requestId,
-                ProxyConfigId = proxyConfigId,
-                RequestPath = context.Request.Path + context.Request.QueryString,
-                Method = context.Request.Method,
-                RequestHeaders = requestHeaders,
-                RequestBody = requestBody,
-                ResponseStatusCode = context.Response.StatusCode,
-                ResponseHeaders = responseHeaders,
-                ResponseBody = responseBody,
-                TargetUrl = proxyConfig?.TargetUrl ?? "",
-                RequestTime = DateTime.Now.AddMilliseconds(-stopwatch.ElapsedMilliseconds),
-                ResponseTime = DateTime.Now,
-                Duration = stopwatch.ElapsedMilliseconds,
-                ClientIp = clientIp,
-                UserAgent = context.Request.Headers.UserAgent.ToString(),
-                TokenUsage = ExtractTokenUsage(responseBody)
-            };
+                await _next(context);
+                
+                stopwatch.Stop();
 
-            // 异步保存日志
-            _ = Task.Run(async () =>
-            {
-                try
+                // 创建日志条目（流式请求不记录响应体）
+                using var scope = _serviceProvider.CreateScope();
+                var logRepository = scope.ServiceProvider.GetRequiredService<IApiRequestLogRepository>();
+                var proxyService = scope.ServiceProvider.GetRequiredService<IProxyService>();
+                
+                var proxyConfig = await GetProxyConfigFromAuthAsync(context, proxyService);
+                var proxyConfigId = proxyConfig?.Id ?? 0;
+
+                logEntry = new ApiRequestLog
                 {
-                    await logRepository.InsertAsync(logEntry);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "保存API请求日志失败: {RequestId}", requestId);
-                }
-            });
+                    RequestId = requestId,
+                    ProxyConfigId = proxyConfigId,
+                    RequestPath = context.Request.Path + context.Request.QueryString,
+                    Method = context.Request.Method,
+                    RequestHeaders = requestHeaders,
+                    RequestBody = requestBody,
+                    ResponseStatusCode = context.Response.StatusCode,
+                    ResponseHeaders = "{}",  // 流式请求不记录响应头
+                    ResponseBody = "[STREAMING_RESPONSE]", // 标记为流式响应
+                    TargetUrl = proxyConfig?.TargetUrl ?? "",
+                    RequestTime = DateTime.Now.AddMilliseconds(-stopwatch.ElapsedMilliseconds),
+                    ResponseTime = DateTime.Now,
+                    Duration = stopwatch.ElapsedMilliseconds,
+                    ClientIp = clientIp,
+                    UserAgent = context.Request.Headers.UserAgent.ToString(),
+                    TokenUsage = null // 流式请求无法统计token使用
+                };
 
-            // 复制响应内容到原始流
-            responseBodyStream.Seek(0, SeekOrigin.Begin);
-            await responseBodyStream.CopyToAsync(originalResponseBody);
-        }
-        catch (Exception ex)
-        {
-            stopwatch.Stop();
-            
-            // 记录错误日志
-            if (logEntry == null)
+                // 异步保存日志
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await logRepository.InsertAsync(logEntry);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "保存API请求日志失败: {RequestId}", requestId);
+                    }
+                });
+            }
+            catch (Exception ex)
             {
+                stopwatch.Stop();
+                
+                // 记录错误日志
                 using var scope = _serviceProvider.CreateScope();
                 var logRepository = scope.ServiceProvider.GetRequiredService<IApiRequestLogRepository>();
                 var proxyService = scope.ServiceProvider.GetRequiredService<IProxyService>();
@@ -148,14 +136,126 @@ public class ProxyLoggingMiddleware
                         _logger.LogError(logEx, "保存错误日志失败: {RequestId}", requestId);
                     }
                 });
-            }
 
-            // 重新抛出异常
-            throw;
+                throw;
+            }
         }
-        finally
+        else
         {
-            context.Response.Body = originalResponseBody;
+            // 非流式请求：缓存响应体
+            var originalResponseBody = context.Response.Body;
+            using var responseBodyStream = new MemoryStream();
+            context.Response.Body = responseBodyStream;
+
+            try
+            {
+                // 执行下一个中间件
+                await _next(context);
+                
+                stopwatch.Stop();
+
+                // 读取响应内容
+                responseBodyStream.Seek(0, SeekOrigin.Begin);
+                var responseBody = await new StreamReader(responseBodyStream).ReadToEndAsync();
+                var responseHeaders = SerializeHeaders(context.Response.Headers);
+
+                // 创建日志条目
+                using var scope = _serviceProvider.CreateScope();
+                var logRepository = scope.ServiceProvider.GetRequiredService<IApiRequestLogRepository>();
+                var proxyService = scope.ServiceProvider.GetRequiredService<IProxyService>();
+                
+                // 尝试根据Authorization头获取代理配置
+                var proxyConfig = await GetProxyConfigFromAuthAsync(context, proxyService);
+                var proxyConfigId = proxyConfig?.Id ?? 0;
+
+                logEntry = new ApiRequestLog
+                {
+                    RequestId = requestId,
+                    ProxyConfigId = proxyConfigId,
+                    RequestPath = context.Request.Path + context.Request.QueryString,
+                    Method = context.Request.Method,
+                    RequestHeaders = requestHeaders,
+                    RequestBody = requestBody,
+                    ResponseStatusCode = context.Response.StatusCode,
+                    ResponseHeaders = responseHeaders,
+                    ResponseBody = responseBody,
+                    TargetUrl = proxyConfig?.TargetUrl ?? "",
+                    RequestTime = DateTime.Now.AddMilliseconds(-stopwatch.ElapsedMilliseconds),
+                    ResponseTime = DateTime.Now,
+                    Duration = stopwatch.ElapsedMilliseconds,
+                    ClientIp = clientIp,
+                    UserAgent = context.Request.Headers.UserAgent.ToString(),
+                    TokenUsage = ExtractTokenUsage(responseBody)
+                };
+
+                // 异步保存日志
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await logRepository.InsertAsync(logEntry);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "保存API请求日志失败: {RequestId}", requestId);
+                    }
+                });
+
+                // 复制响应内容到原始流
+                responseBodyStream.Seek(0, SeekOrigin.Begin);
+                await responseBodyStream.CopyToAsync(originalResponseBody);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                
+                // 记录错误日志
+                if (logEntry == null)
+                {
+                    using var scope = _serviceProvider.CreateScope();
+                    var logRepository = scope.ServiceProvider.GetRequiredService<IApiRequestLogRepository>();
+                    var proxyService = scope.ServiceProvider.GetRequiredService<IProxyService>();
+                    
+                    var proxyConfig = await GetProxyConfigFromAuthAsync(context, proxyService);
+                    var proxyConfigId = proxyConfig?.Id ?? 0;
+
+                    logEntry = new ApiRequestLog
+                    {
+                        RequestId = requestId,
+                        ProxyConfigId = proxyConfigId,
+                        RequestPath = context.Request.Path + context.Request.QueryString,
+                        Method = context.Request.Method,
+                        RequestHeaders = requestHeaders,
+                        RequestBody = requestBody,
+                        ResponseStatusCode = context.Response.StatusCode,
+                        TargetUrl = proxyConfig?.TargetUrl ?? "",
+                        RequestTime = DateTime.Now.AddMilliseconds(-stopwatch.ElapsedMilliseconds),
+                        Duration = stopwatch.ElapsedMilliseconds,
+                        ErrorMessage = ex.Message,
+                        ClientIp = clientIp,
+                        UserAgent = context.Request.Headers.UserAgent.ToString()
+                    };
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await logRepository.InsertAsync(logEntry);
+                        }
+                        catch (Exception logEx)
+                        {
+                            _logger.LogError(logEx, "保存错误日志失败: {RequestId}", requestId);
+                        }
+                    });
+                }
+
+                // 重新抛出异常
+                throw;
+            }
+            finally
+            {
+                context.Response.Body = originalResponseBody;
+            }
         }
     }
 
@@ -240,5 +340,29 @@ public class ProxyLoggingMiddleware
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 检查请求是否为流式请求
+    /// </summary>
+    private static bool IsStreamRequest(string requestBody)
+    {
+        if (string.IsNullOrEmpty(requestBody))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(requestBody);
+            if (document.RootElement.TryGetProperty("stream", out var streamProperty))
+            {
+                return streamProperty.GetBoolean();
+            }
+        }
+        catch
+        {
+            // 解析失败，默认为非流式
+        }
+
+        return false;
     }
 } 
