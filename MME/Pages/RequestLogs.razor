@@ -136,7 +136,7 @@
         }
 
         <Table DataSource="@logs" TItem="ApiRequestLogDto" Loading="@loading" 
-               Bordered Size="@TableSize.Small" ScrollX="1400px">
+               Bordered Size="@TableSize.Small" ScrollX="1500px">
             <AntDesign.Column Title="请求时间" DataIndex="RequestTime" TData="DateTime" Width="160">
                 <Tooltip Title="@context.RequestTime.ToString("yyyy-MM-dd HH:mm:ss.fff")">
                     @context.RequestTime.ToString("MM-dd HH:mm:ss")
@@ -156,6 +156,21 @@
             </AntDesign.Column>
             <AntDesign.Column Title="路径" DataIndex="RequestPath" TData="string" Width="200">
                 <Text Code>@context.RequestPath</Text>
+            </AntDesign.Column>
+            <AntDesign.Column Title="流式请求" DataIndex="RequestBody" TData="string" Width="100">
+                @{
+                    var isStream = ParseStreamParameter(context.RequestBody);
+                }
+                @if (isStream.HasValue)
+                {
+                    <Tag Color="@(isStream.Value ? TagColor.Volcano : TagColor.Blue)">
+                        @(isStream.Value ? "流式" : "非流式")
+                    </Tag>
+                }
+                else
+                {
+                    <span style="color: #999;">N/A</span>
+                }
             </AntDesign.Column>
             <AntDesign.Column Title="状态码" DataIndex="ResponseStatusCode" TData="int" Width="80">
                 <Tag Color="@GetStatusColor(context.ResponseStatusCode)">@context.ResponseStatusCode</Tag>
@@ -214,6 +229,21 @@
                     <DescriptionsItem Title="耗时">@($"{selectedLog.Duration}ms")</DescriptionsItem>
                     <DescriptionsItem Title="方法">@selectedLog.Method</DescriptionsItem>
                     <DescriptionsItem Title="路径">@selectedLog.RequestPath</DescriptionsItem>
+                    <DescriptionsItem Title="流式请求">
+                        @{
+                            var isStream = ParseStreamParameter(selectedLog.RequestBody);
+                        }
+                        @if (isStream.HasValue)
+                        {
+                            <Tag Color="@(isStream.Value ? TagColor.Volcano : TagColor.Blue)">
+                                @(isStream.Value ? "是" : "否")
+                            </Tag>
+                        }
+                        else
+                        {
+                            <span style="color: #999;">未知</span>
+                        }
+                    </DescriptionsItem>
                     <DescriptionsItem Title="状态码">
                         <Tag Color="@GetStatusColor(selectedLog.ResponseStatusCode)">@selectedLog.ResponseStatusCode</Tag>
                     </DescriptionsItem>
@@ -233,6 +263,12 @@
                     <DescriptionsItem Title="客户端IP">@selectedLog.ClientIp</DescriptionsItem>
                     <DescriptionsItem Title="User-Agent" Span="2">@selectedLog.UserAgent</DescriptionsItem>
                     <DescriptionsItem Title="目标URL" Span="2">@selectedLog.TargetUrl</DescriptionsItem>
+                    @if (!string.IsNullOrEmpty(selectedLog.TokenUsage))
+                    {
+                        <DescriptionsItem Title="Token使用">
+                            @ParseTokenUsage(selectedLog.TokenUsage)
+                        </DescriptionsItem>
+                    }
                     @if (!string.IsNullOrEmpty(selectedLog.ErrorMessage))
                     {
                         <DescriptionsItem Title="错误信息" Span="2">
@@ -551,6 +587,29 @@
         {
             return json;
         }
+    }
+
+    private bool? ParseStreamParameter(string? requestBody)
+    {
+        if (string.IsNullOrEmpty(requestBody))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(requestBody);
+            var root = doc.RootElement;
+            
+            if (root.TryGetProperty("stream", out var stream))
+            {
+                return stream.GetBoolean();
+            }
+        }
+        catch
+        {
+            // 忽略解析错误
+        }
+
+        return null;
     }
 }
 
