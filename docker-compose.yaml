@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/pg:v0.5.0
+    container_name: mme-postgres
+    environment:
+      POSTGRES_DB: mme
+      POSTGRES_USER: mme_user
+      POSTGRES_PASSWORD: mme_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - mme-network
+    restart: unless-stopped
+
+  mme:
+    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+    container_name: mme-app
+    environment:
+      # 应用配置（必需）
+      ASPNETCORE_URLS: "http://*:5000"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      
+      # 方式一：使用环境变量配置（如果不使用配置文件挂载，请取消注释以下配置）
+      # 数据库配置
+      # DBConnection__DbType: "PostgreSQL"
+      # DBConnection__DBConnection: "Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;"
+      # DBConnection__VectorConnection: "Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;"
+      # DBConnection__VectorSize: "1536"
+      
+      # 管理员配置
+      # Admin__Username: "admin"
+      # Admin__Password: "123456"
+      
+      # OpenAI 配置（可选）
+      # OpenAI__Key: "your_openai_api_key"
+      # OpenAI__EndPoint: "https://api.openai.com"
+      # OpenAI__ChatModel: "gpt-4o"
+      # OpenAI__EmbeddingModel: "text-embedding-ada-002"
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    networks:
+      - mme-network
+    restart: unless-stopped
+    volumes:
+      # 方式二：配置文件挂载（推荐）
+      # 将本地的 appsettings.Production.json 挂载到容器内
+      - ./appsettings.Production.json:/app/appsettings.json:ro
+      # 可选：持久化日志文件
+      - mme_logs:/app/logs
+
+volumes:
+  postgres_data:
+    driver: local
+  mme_logs:
+    driver: local
+
+networks:
+  mme-network:
+    driver: bridge 

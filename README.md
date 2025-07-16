@@ -149,6 +149,149 @@ dotnet run
 
 ### Docker 容器部署
 
+#### 方法一：Docker Compose 一键部署（推荐）
+
+使用 Docker Compose 可以自动部署 MME 系统，支持 PostgreSQL 和 SQLite 两种数据库：
+
+1. **下载配置文件**
+```bash
+# 如果已克隆项目
+cd MME
+
+# 或直接下载必需文件
+wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.yaml
+wget https://raw.githubusercontent.com/xuzeyu91/MME/main/appsettings.Production.json
+
+# 如果只想使用配置文件方式（不使用环境变量）
+wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.config.yaml
+mv docker-compose.config.yaml docker-compose.yaml
+
+# 如果想使用 SQLite 快速体验（无需 PostgreSQL 数据库）
+wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.sqlite.yaml
+mv docker-compose.sqlite.yaml docker-compose.yaml
+```
+
+2. **启动服务**
+```bash
+docker-compose up -d
+```
+
+3. **查看服务状态**
+```bash
+docker-compose ps
+```
+
+4. **访问系统**
+- 打开浏览器访问：`http://localhost:5000`
+- 默认用户名：`admin`，密码：`123456`
+
+**💡 选择不同的部署版本：**
+- **默认版本**：PostgreSQL 数据库，适合生产环境
+- **快速体验版**：SQLite 数据库，适合开发和测试
+- **配置文件版**：通过 appsettings.json 配置，更易管理
+
+5. **停止服务**
+```bash
+docker-compose down
+```
+
+6. **完全清理（包括数据卷）**
+```bash
+docker-compose down -v
+```
+
+#### 自定义配置
+
+有两种方式可以自定义 MME 系统配置：
+
+**方式一：配置文件挂载（推荐）**
+
+1. 修改项目根目录下的 `appsettings.Production.json` 文件：
+```json
+{
+  "DBConnection": {
+    "DbType": "PostgreSQL",
+    "DBConnection": "Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;",
+    "VectorConnection": "Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;",
+    "VectorSize": 1536
+  },
+  "Admin": {
+    "Username": "your_admin",
+    "Password": "your_secure_password"
+  },
+  "OpenAI": {
+    "Key": "your_openai_api_key",
+    "EndPoint": "https://api.openai.com",
+    "ChatModel": "gpt-4o",
+    "EmbeddingModel": "text-embedding-ada-002"
+  }
+}
+```
+
+2. 启动服务（配置文件会自动挂载到容器内）：
+```bash
+docker-compose up -d
+```
+
+**方式二：环境变量配置**
+
+如果您更喜欢使用环境变量，可以注释掉配置文件挂载，并取消注释 `docker-compose.yaml` 中的环境变量：
+
+```yaml
+environment:
+  # 取消注释以下配置
+  DBConnection__DbType: "PostgreSQL"
+  DBConnection__DBConnection: "Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;"
+  Admin__Username: "your_admin"
+  Admin__Password: "your_secure_password"
+  OpenAI__Key: "your_openai_api_key"
+  
+# 注释掉配置文件挂载
+# volumes:
+#   - ./appsettings.Production.json:/app/appsettings.Production.json:ro
+```
+
+#### 方法二：单独运行容器
+
+如果您已有 PostgreSQL 数据库，可以单独运行 MME 容器：
+
+1. **拉取镜像**
+```bash
+docker pull registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+```
+
+2. **运行容器**
+
+**使用 PostgreSQL（生产推荐）：**
+```bash
+docker run -d \
+  --name mme \
+  -p 5000:5000 \
+  -e DBConnection__DbType="PostgreSQL" \
+  -e DBConnection__DBConnection="Host=your_db_host;Port=5432;Database=mme;User ID=your_user;Password=your_password;" \
+  -e Admin__Username="admin" \
+  -e Admin__Password="your_secure_password" \
+  registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+```
+
+**使用 SQLite（快速体验）：**
+```bash
+docker run -d \
+  --name mme \
+  -p 5000:5000 \
+  -v mme_data:/app \
+  -e DBConnection__DbType="Sqlite" \
+  -e DBConnection__DBConnection="Data Source=mme.db" \
+  -e DBConnection__VectorConnection="mmevector.db" \
+  -e Admin__Username="admin" \
+  -e Admin__Password="your_secure_password" \
+  registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+```
+
+#### 方法三：自行构建镜像
+
+如果您需要修改代码或自定义构建：
+
 1. **构建镜像**
 ```bash
 docker build -t mme:latest .
@@ -159,12 +302,51 @@ docker build -t mme:latest .
 docker run -d \
   --name mme \
   -p 5000:5000 \
-  -e DBConnection__DbType="PostgreSQL" \
-  -e DBConnection__DBConnection="Host=your_db_host;Port=5432;Database=mme;User ID=your_user;Password=your_password;" \
+  -e DBConnection__DbType="SQLite" \
+  -e DBConnection__DBConnection="Data Source=mme.db" \
   -e Admin__Username="admin" \
   -e Admin__Password="your_secure_password" \
   mme:latest
 ```
+
+### 环境变量配置说明
+
+MME 系统支持通过环境变量进行配置，主要配置项如下：
+
+| 环境变量 | 说明 | 默认值 | 示例 |
+|----------|------|--------|------|
+| `DBConnection__DbType` | 数据库类型 | `PostgreSQL` | `PostgreSQL` 或 `Sqlite` |
+| `DBConnection__DBConnection` | 数据库连接字符串 | - | `Host=postgres;Port=5432;Database=mme;User ID=mme_user;Password=mme_password;` |
+| `DBConnection__VectorConnection` | 向量数据库连接字符串 | - | 同数据库连接字符串 |
+| `DBConnection__VectorSize` | 向量维度大小 | `1536` | `1536` |
+| `Admin__Username` | 管理员用户名 | `admin` | `admin` |
+| `Admin__Password` | 管理员密码 | `123456` | **请修改为强密码** |
+| `OpenAI__Key` | OpenAI API 密钥 | - | `sk-xxx...` |
+| `OpenAI__EndPoint` | OpenAI API 端点 | `https://api.openai.com` | 自定义端点地址 |
+| `OpenAI__ChatModel` | 默认聊天模型 | `gpt-4o` | 模型名称 |
+| `OpenAI__EmbeddingModel` | 默认嵌入模型 | `text-embedding-ada-002` | 模型名称 |
+| `ASPNETCORE_URLS` | 应用监听地址 | `http://0.0.0.0:5000` | 绑定地址和端口 |
+| `ASPNETCORE_ENVIRONMENT` | 应用环境 | `Production` | `Development` 或 `Production` |
+
+### 生产环境部署建议
+
+1. **安全配置**：
+   - 修改默认管理员密码
+   - 使用强密码保护数据库
+   - 配置 HTTPS 证书
+   - 限制网络访问权限
+
+2. **性能优化**：
+   - 调整 PostgreSQL 配置参数
+   - 配置适当的内存和 CPU 资源
+   - 启用数据库连接池
+   - 定期清理历史日志数据
+
+3. **监控告警**：
+   - 监控容器运行状态
+   - 监控数据库性能指标
+   - 配置日志收集和分析
+   - 设置存储空间告警
 
 ## 📖 使用指南
 
@@ -339,6 +521,10 @@ MME/
 │       │   └── Excel/                # Excel 处理
 │       └── Utils/                    # 工具类
 ├── Dockerfile                        # Docker 容器配置
+├── docker-compose.yaml               # Docker Compose 配置文件（PostgreSQL + 支持环境变量和配置文件）
+├── docker-compose.config.yaml        # Docker Compose 配置文件（PostgreSQL + 纯配置文件方式）
+├── docker-compose.sqlite.yaml        # Docker Compose 配置文件（SQLite + 快速体验版）
+├── appsettings.Production.json       # 生产环境配置文件模板
 └── README.md                         # 项目文档
 ```
 

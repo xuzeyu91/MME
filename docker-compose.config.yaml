@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mme-postgres
+    environment:
+      POSTGRES_DB: mme
+      POSTGRES_USER: mme_user
+      POSTGRES_PASSWORD: mme_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - mme-network
+    restart: unless-stopped
+
+  mme:
+    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+    container_name: mme-app
+    environment:
+      # 仅设置必需的应用环境配置
+      ASPNETCORE_URLS: "http://0.0.0.0:5000"
+      ASPNETCORE_ENVIRONMENT: "Production"
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    networks:
+      - mme-network
+    restart: unless-stopped
+    volumes:
+      # 配置文件挂载 - 所有配置都通过 appsettings.Production.json 进行
+      - ./appsettings.Production.json:/app/appsettings.Production.json:ro
+      # 可选：持久化日志文件
+      - mme_logs:/app/logs
+
+volumes:
+  postgres_data:
+    driver: local
+  mme_logs:
+    driver: local
+
+networks:
+  mme-network:
+    driver: bridge 
