@@ -2,27 +2,6 @@
 
 MME（Model Management & Evaluation）是一个基于 Blazor Server Side 构建的现代化 LLM 日志追踪、回放、评测一体化平台，为企业级 AI 应用提供全方位的模型管理和效果评估解决方案。
 
-## 📸 系统界面展示
-
-<div align="center">
-
-### 系统登录
-![系统登录](images/登录.png)
-
-### 代理配置管理
-![代理配置管理](images/添加代理.png)
-
-### 请求日志监控
-![请求日志监控](images/请求日志.png)
-
-### 数据集管理
-![数据集管理](images/数据集管理.png)
-
-### 使用手册
-![使用手册](images/使用手册.png)
-
-</div>
-
 ## ✨ 核心功能特性
 
 ### 🔀 智能代理切换
