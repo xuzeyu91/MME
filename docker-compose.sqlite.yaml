@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mme:
+    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.0
+    container_name: mme-app
+    environment:
+      # 应用配置
+      ASPNETCORE_URLS: "http://*:5000"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      
+      # 数据库配置 - SQLite（无需外部数据库）
+      DBConnection__DbType: "Sqlite"
+      DBConnection__DBConnection: "Data Source=mme.db"
+      DBConnection__VectorConnection: "mmevector.db"
+      DBConnection__VectorSize: "1536"
+      
+      # 管理员配置
+      Admin__Username: "admin"
+      Admin__Password: "123456"
+      
+      # OpenAI 配置（可选）
+      # OpenAI__Key: "your_openai_api_key"
+      # OpenAI__EndPoint: "https://api.openai.com"
+      # OpenAI__ChatModel: "gpt-4o"
+      # OpenAI__EmbeddingModel: "text-embedding-ada-002"
+    ports:
+      - "5000:5000"
+    volumes:
+      # 持久化数据库文件和日志
+      - mme_data:/app
+    restart: unless-stopped
+
+volumes:
+  mme_data:
+    driver: local 
