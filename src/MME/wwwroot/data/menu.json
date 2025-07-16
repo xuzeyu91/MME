@@ -1,0 +1,26 @@
+﻿[
+  {
+    "path": "/proxy-config",
+    "name": "代理配置",
+    "key": "proxy-config",
+    "icon": "setting"
+  },
+  {
+    "path": "/request-logs",
+    "name": "请求日志",
+    "key": "request-logs",
+    "icon": "file-text"
+  },
+  {
+    "path": "/dataset-management",
+    "name": "数据集管理",
+    "key": "dataset-management",
+    "icon": "database"
+  },
+  {
+    "path": "/user-guide",
+    "name": "使用手册",
+    "key": "user-guide",
+    "icon": "book"
+  }
+]

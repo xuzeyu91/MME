@@ -1,0 +1,52 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(BasicLayout)">
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        <RedirectToLogin />
+                    }
+                    else
+                    {
+                        <div style="text-align: center; padding: 50px;">
+                            <h3>权限不足</h3>
+                            <p>你无权访问此资源。请联系管理员获取必要的权限。</p>
+                        </div>
+                    }
+                </NotAuthorized>
+                <Authorizing>
+                    <div style="text-align: center; padding: 50px;">
+                        <AntDesign.Spin Size="@AntDesign.SpinSize.Large" />
+                        <p style="margin-top: 16px;">正在验证身份...</p>
+                    </div>
+                </Authorizing>
+            </AuthorizeRouteView>
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(BasicLayout)">
+                <div style="text-align: center; padding: 50px;">
+                    <h3>页面未找到</h3>
+                    <p>抱歉，您访问的页面不存在。</p>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
+<AntContainer />
+
+@code {
+    private class RedirectToLogin : ComponentBase
+    {
+        [Inject] private NavigationManager Navigation { get; set; }
+
+        protected override void OnInitialized()
+        {
+            // 强制重定向到登录页面，确保清除当前页面状态
+            Navigation.NavigateTo("/user/login", true);
+        }
+    }
+}

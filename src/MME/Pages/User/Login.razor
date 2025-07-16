@@ -1,0 +1,108 @@
+@namespace MME.Pages.User
+@layout LoginLayout
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@page "/user/login"
+@attribute [AllowAnonymous]
+
+<div class="main__b__0">
+    <div class="login">
+        <h2 class="login-title">欢迎登录 MME 系统</h2>
+        <p class="login-subtitle">请使用您的账号密码登录系统</p>
+        <Form Model="@_model" OnFinish="HandleSubmit">
+            <Tabs ActiveKey="@context.LoginType">
+                <TabPane Key="1" Tab="账号登录">
+                    <FormItem>
+                        <AntDesign.Input Placeholder="请输入账号" Size="@InputSize.Large" @bind-Value="@context.UserName">
+                            <Prefix><Icon Type="user" /></Prefix>
+                        </AntDesign.Input>
+                    </FormItem>
+                    <FormItem>
+                        <AntDesign.Input Placeholder="请输入密码" Size="@InputSize.Large" @bind-Value="@context.Password" Type="@InputType.Password">
+                            <Prefix><Icon Type="lock" /></Prefix>
+                        </AntDesign.Input>
+                    </FormItem>
+                </TabPane>
+            </Tabs>
+            <Button Type="@ButtonType.Primary" HtmlType="submit" Class="submit" Size="@ButtonSize.Large" Block Loading="@_isLoading">登录</Button>
+        </Form>
+    </div>
+</div>
+
+<style>
+    .main__b__0 {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 20px;
+    }
+
+    .login {
+        width: 100%;
+        max-width: 400px;
+        padding: 48px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(10px);
+    }
+
+    .login-title {
+        font-size: 32px;
+        font-weight: 600;
+        color: #262626;
+        text-align: center;
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+    }
+
+    .login-subtitle {
+        color: #8c8c8c;
+        text-align: center;
+        margin-bottom: 40px;
+        font-size: 15px;
+        line-height: 1.4;
+    }
+
+    .login .submit {
+        margin-top: 32px;
+        height: 44px;
+        font-size: 16px;
+        border-radius: 8px;
+        font-weight: 500;
+    }
+
+    .login-tips {
+        margin-top: 32px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid #e9ecef;
+    }
+
+    .login-tips p {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    /* 响应式设计 */
+    @@media (max-width: 768px) {
+        .main__b__0 {
+            padding: 16px;
+        }
+        
+        .login {
+            padding: 32px 24px;
+            max-width: 100%;
+        }
+        
+        .login-title {
+            font-size: 28px;
+        }
+    }
+</style> 

@@ -1,0 +1,2147 @@
+@page "/request-logs"
+@using MME.Domain.Repositories
+@using MME.Domain.Model
+@using MME.Models
+@using MME.Domain.Common.Excel
+@using AntDesign
+@using SqlSugar
+@using System.Linq.Expressions
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using System.Text.Json
+@using NPOI.XSSF.UserModel
+@using NPOI.SS.UserModel
+@using NPOI.HSSF.Util
+@using Newtonsoft.Json
+@using Newtonsoft.Json.Linq
+@attribute [Authorize]
+@implements IDisposable
+@inject MME.Domain.Repositories.IApiRequestLogRepository LogRepository
+@inject MME.Domain.Services.IProxyService ProxyService
+@inject IMessageService MessageService
+@inject IJSRuntime JSRuntime
+@inject MME.Domain.Services.IDatasetService DatasetService
+
+<PageTitle>请求日志</PageTitle>
+
+<div class="request-logs-container">
+    <PageHeader Title="API请求日志" SubTitle="查看所有API请求的详细日志信息" Class="logs-header">
+        <PageHeaderExtra>
+            <Space>
+                <SpaceItem>
+                    <Dropdown>
+                        <Overlay>
+                            <Menu>
+                                <MenuItem OnClick="ExportToExcel" Disabled="@exportLoading">
+                                    <Icon Type="file-excel" /> 导出Excel
+                                    @if (totalCount > 0)
+                                    {
+                                        <span style="margin-left: 8px; font-size: 12px; color: #8c8c8c;">
+                                            (@(HasActiveFilters() ? "当前筛选：" : "全部：")@totalCount 条)
+                                        </span>
+                                    }
+                                </MenuItem>
+                                <MenuItem OnClick="ExportToLog" Disabled="@exportLoading">
+                                    <Icon Type="file-text" /> 导出Log文件
+                                    @if (totalCount > 0)
+                                    {
+                                        <span style="margin-left: 8px; font-size: 12px; color: #8c8c8c;">
+                                            (@(HasActiveFilters() ? "当前筛选：" : "全部：")@totalCount 条)
+                                        </span>
+                                    }
+                                </MenuItem>
+                            </Menu>
+                        </Overlay>
+                        <ChildContent>
+                            <Button Type="@ButtonType.Default" Icon="download" Loading="@exportLoading">
+                                导出数据
+                                @if (totalCount > 0)
+                                {
+                                    <span style="margin-left: 4px; font-size: 12px; color: #666;">
+                                        (@totalCount 条)
+                                    </span>
+                                }
+                                <Icon Type="down" />
+                            </Button>
+                        </ChildContent>
+                    </Dropdown>
+                </SpaceItem>
+                <SpaceItem>
+                    <Button Type="@ButtonType.Primary" Icon="reload" OnClick="RefreshLogs" Loading="@loading">
+                        刷新
+                    </Button>
+                </SpaceItem>
+
+            </Space>
+        </PageHeaderExtra>
+    </PageHeader>
+
+    <Card Class="logs-card" Bordered="false">
+        <div style="margin-bottom: 16px;">
+            <Space Direction="SpaceDirection.Vertical" Style="width: 100%;">
+                <SpaceItem>
+                    <Space>
+                        <SpaceItem>
+                            <RangePicker @bind-Value="dateRange" Placeholder="@(new[] { "开始日期", "结束日期" })" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Size="@ButtonSize.Small" OnClick="() => SetDateRange(0)">今天</Button>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Size="@ButtonSize.Small" OnClick="() => SetDateRange(1)">昨天</Button>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Size="@ButtonSize.Small" OnClick="() => SetDateRange(7)">最近7天</Button>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Size="@ButtonSize.Small" OnClick="() => SetDateRange(30)">最近30天</Button>
+                        </SpaceItem>
+                    </Space>
+                </SpaceItem>
+                <SpaceItem>
+                    <Space>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedStatus" TItemValue="int?" TItem="int" Placeholder="选择状态码" Style="width: 120px" AllowClear>
+                                <SelectOptions>
+                                    <SelectOption TItemValue="int?" TItem="int" Label="200" Value="200" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="400" Value="400" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="401" Value="401" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="403" Value="403" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="404" Value="404" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="500" Value="500" />
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedProxyName" TItemValue="string" TItem="string" Placeholder="选择代理" Style="width: 150px" AllowClear>
+                                <SelectOptions>
+                                    @foreach (var proxy in availableProxyNames)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Label="@proxy" Value="@proxy" />
+                                    }
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedModelName" TItemValue="string" TItem="string" Placeholder="选择模型" Style="width: 180px" AllowClear>
+                                <SelectOptions>
+                                    @foreach (var model in availableModelNames)
+                                    {
+                                        <SelectOption TItemValue="string" TItem="string" Label="@model" Value="@model" />
+                                    }
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Input @bind-Value="searchPath" Placeholder="搜索路径" Style="width: 200px" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Type="@ButtonType.Primary" Icon="search" OnClick="SearchLogs">
+                                搜索
+                            </Button>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Icon="clear" OnClick="ClearFilters">
+                                清空筛选
+                            </Button>
+                        </SpaceItem>
+                    </Space>
+                </SpaceItem>
+            </Space>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <Alert Type="@AlertType.Info" ShowIcon="true" Closable="false">
+                <MessageTemplate>
+                    @if (HasActiveFilters())
+                    {
+                        <Text>当前筛选条件：</Text>
+                        @if (dateRange != null && dateRange.Length == 2)
+                        {
+                            <Tag Color="TagColor.Blue" Style="margin-left: 8px;">
+                                日期：@dateRange[0].ToString("MM-dd") 至 @dateRange[1].ToString("MM-dd")
+                            </Tag>
+                        }
+                        @if (selectedStatus.HasValue)
+                        {
+                            <Tag Color="TagColor.Green" Style="margin-left: 4px;">
+                                状态码：@selectedStatus.Value
+                            </Tag>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(selectedProxyName))
+                        {
+                            <Tag Color="TagColor.Purple" Style="margin-left: 4px;">
+                                代理：@selectedProxyName
+                            </Tag>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(selectedModelName))
+                        {
+                            <Tag Color="TagColor.Cyan" Style="margin-left: 4px;">
+                                模型：@selectedModelName
+                            </Tag>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(searchPath))
+                        {
+                            <Tag Color="TagColor.Orange" Style="margin-left: 4px;">
+                                路径：@searchPath
+                            </Tag>
+                        }
+                        <span Style="margin-left: 8px;">共找到 @totalCount 条记录</span>
+                    }
+                    else
+                    {
+                        <Text>显示全部记录，共 @totalCount 条</Text>
+                    }
+                </MessageTemplate>
+            </Alert>
+        </div>
+
+        <Table DataSource="@logs" TItem="ApiRequestLogDto" Loading="@loading" 
+               Bordered Size="@TableSize.Small" ScrollX="1500px" 
+               HidePagination="true">
+            <AntDesign.Column Title="请求时间" DataIndex="RequestTime" TData="DateTime" Width="160">
+                <Tooltip Title="@context.RequestTime.ToString("yyyy-MM-dd HH:mm:ss.fff")">
+                    @context.RequestTime.ToString("MM-dd HH:mm:ss")
+                </Tooltip>
+            </AntDesign.Column>
+            <AntDesign.Column Title="代理名称" DataIndex="ProxyName" TData="string" Width="120">
+                <Tag Color="@TagColor.Blue">@context.ProxyName</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="模型" DataIndex="ModelName" TData="string" Width="140">
+                @if (!string.IsNullOrEmpty(context.ModelName))
+                {
+                    <Tag Color="@TagColor.Green">@context.ModelName</Tag>
+                }
+            </AntDesign.Column>
+            <AntDesign.Column Title="方法" DataIndex="Method" TData="string" Width="80">
+                <Tag Color="@GetMethodColor(context.Method)">@context.Method</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="路径" DataIndex="RequestPath" TData="string" Width="200">
+                <Text Code>@context.RequestPath</Text>
+            </AntDesign.Column>
+            <AntDesign.Column Title="流式请求" DataIndex="RequestBody" TData="string" Width="100">
+                @{
+                    var isStream = ParseStreamParameter(context.RequestBody);
+                }
+                @if (isStream.HasValue)
+                {
+                    <Tag Color="@(isStream.Value ? TagColor.Volcano : TagColor.Blue)">
+                        @(isStream.Value ? "流式" : "非流式")
+                    </Tag>
+                }
+                else
+                {
+                    <span style="color: #999;">N/A</span>
+                }
+            </AntDesign.Column>
+            <AntDesign.Column Title="状态码" DataIndex="ResponseStatusCode" TData="int" Width="80">
+                <Tag Color="@GetStatusColor(context.ResponseStatusCode)">@context.ResponseStatusCode</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="耗时" DataIndex="Duration" TData="long" Width="80">
+                @($"{context.Duration}ms")
+            </AntDesign.Column>
+            <AntDesign.Column Title="Token使用" DataIndex="TokenUsage" TData="string" Width="120">
+                @if (!string.IsNullOrEmpty(context.TokenUsage))
+                {
+                    var usage = ParseTokenUsage(context.TokenUsage);
+                    <Text>@usage</Text>
+                }
+            </AntDesign.Column>
+            <ActionColumn Title="操作" Width="180">
+                <Space>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                OnClick="() => ShowLogDetail(context)">
+                            详情
+                        </Button>
+                    </SpaceItem>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                OnClick="() => ShowAddToDatasetModal(context)">
+                            添加到数据集
+                        </Button>
+                    </SpaceItem>
+                </Space>
+            </ActionColumn>
+        </Table>
+
+        <div style="margin-top: 16px; text-align: right;">
+            <Pagination Current="@currentPage" 
+                       Total="@totalCount" 
+                       PageSize="@pageSize" 
+                       OnChange="OnPageChange" />
+        </div>
+    </Card>
+</div>
+
+<!-- 使用封装的请求日志详情组件 -->
+<RequestLogDetailModal Visible="@detailModalVisible" 
+                      LogData="@selectedLog" 
+                      OnCancel="@(() => detailModalVisible = false)"
+                      OnAddToDataset="@OnDetailModalAddToDataset" />
+
+@code {
+    private List<ApiRequestLogDto> logs = new();
+    private bool loading = false;
+    private bool exportLoading = false;  // 导出状态
+    private bool detailModalVisible = false;
+    private ApiRequestLogDto? selectedLog = null;
+    
+    // 添加到数据集相关
+    private bool addToDatasetModalVisible = false;
+    private List<MME.Domain.Repositories.Dataset.DatasetDto> availableDatasets = new();
+    private Guid? selectedDatasetId = null;
+    private List<string> datasetTags = new();
+    private string datasetRemarks = "";
+    private int? datasetDifficulty = null;
+    private int? datasetQuality = null;
+    private bool addToDatasetLoading = false;
+    private ApiRequestLogDto? currentLogForDataset = null;
+    private string datasetTagsInput = "";
+    
+    // 表单模型
+    private DatasetFormModel datasetFormModel = new();
+    
+    // 组件生命周期管理
+    private CancellationTokenSource? _cancellationTokenSource;
+    
+    private DateTime[]? dateRange = null;
+    private int? selectedStatus = null;
+    private string? selectedProxyName = null;
+    private string? selectedModelName = null;
+    private string searchPath = "";
+    
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    
+    // 可用的代理名称和模型名称列表
+    private List<string> availableProxyNames = new();
+    private List<string> availableModelNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 初始化取消令牌
+        _cancellationTokenSource = new CancellationTokenSource();
+        
+        // 设置默认日期范围为最近7天
+        var today = DateTime.Today;
+        dateRange = new DateTime[] { today.AddDays(-6), today };
+        
+        // 加载可用的代理名称和模型名称
+        await LoadAvailableOptions();
+        
+        await LoadLogs();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _cancellationTokenSource?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经释放，忽略错误
+        }
+        
+        try
+        {
+            _cancellationTokenSource?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经释放，忽略错误
+        }
+        
+        _cancellationTokenSource = null;
+    }
+
+    private async Task LoadAvailableOptions()
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        try
+        {
+            // 获取所有可用的代理名称
+            availableProxyNames = await LogRepository.GetDistinctProxyNamesAsync();
+            
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+            
+            // 获取所有可用的模型名称
+            availableModelNames = await LogRepository.GetDistinctModelNamesAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"加载筛选选项失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    private async Task LoadLogs()
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        loading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // 组件已释放，直接返回
+        }
+
+        try
+        {
+            var page = new SqlSugar.PageModel { PageIndex = currentPage, PageSize = pageSize };
+            
+            // 如果选择了代理名称，先获取对应的ProxyConfigId
+            Guid? selectedProxyConfigId = null;
+            if (!string.IsNullOrWhiteSpace(selectedProxyName))
+            {
+                try
+                {
+                    // 注入ProxyService来查询代理配置
+                    var allConfigs = await ProxyService.GetAllConfigsAsync();
+                    var selectedConfig = allConfigs.FirstOrDefault(c => c.Name == selectedProxyName);
+                    selectedProxyConfigId = selectedConfig?.Id;
+                }
+                catch (Exception ex)
+                {
+                    if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+                    {
+                        try
+                        {
+                            _ = MessageService.Warning($"查询代理配置失败：{ex.Message}");
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // 组件已释放，忽略错误
+                        }
+                    }
+                }
+            }
+            
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+            
+            // 构建完整的筛选条件（包括ProxyConfigId筛选）
+            Expression<Func<ApiRequestLog, bool>> whereExpression = BuildWhereExpression(selectedProxyConfigId);
+            
+            // 使用简化的Repository方法，只需要处理模型名称筛选
+            var result = await LogRepository.GetLogsWithProxyInfoAsync(
+                whereExpression, 
+                page, 
+                null, // 代理名称筛选已在表达式中处理
+                selectedModelName, // 只有模型名称筛选还需要在Repository层处理
+                SqlSugar.OrderByType.Desc);
+            
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                logs = result.List;
+                totalCount = result.TotalCount;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"加载日志失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        finally
+        {
+            loading = false;
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    private Expression<Func<ApiRequestLog, bool>> BuildWhereExpression(Guid? proxyConfigId = null)
+    {
+        // 使用 SqlSugar 推荐的 Expressionable 方式构建动态表达式
+        var exp = SqlSugar.Expressionable.Create<ApiRequestLog>();
+        
+        // 日期筛选
+        if (dateRange != null && dateRange.Length == 2)
+        {
+            var startDate = dateRange[0].Date;
+            var endDate = dateRange[1].Date.AddDays(1).AddTicks(-1);
+            exp = exp.And(log => log.RequestTime >= startDate && log.RequestTime <= endDate);
+        }
+        
+        // 状态码筛选
+        if (selectedStatus.HasValue)
+        {
+            exp = exp.And(log => log.ResponseStatusCode == selectedStatus.Value);
+        }
+        
+        // 路径筛选
+        if (!string.IsNullOrWhiteSpace(searchPath))
+        {
+            exp = exp.And(log => log.RequestPath.Contains(searchPath));
+        }
+        
+        // 代理配置ID筛选（根据选择的代理名称转换而来）
+        if (proxyConfigId.HasValue)
+        {
+            exp = exp.And(log => log.ProxyConfigId == proxyConfigId.Value);
+        }
+        
+        // 注意：模型名称筛选由于需要从RequestBody的JSON中解析，
+        // 仍然在Repository层的GetLogsWithProxyInfoAsync方法中处理
+        
+        return exp.ToExpression();
+    }
+
+    private async Task RefreshLogs()
+    {
+        currentPage = 1;
+        await LoadAvailableOptions(); // 重新加载筛选选项
+        await LoadLogs();
+    }
+
+    private async Task SearchLogs()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task OnPageChange(PaginationEventArgs args)
+    {
+        currentPage = args.Page;
+        await LoadLogs();
+    }
+
+    private void ShowLogDetail(ApiRequestLogDto log)
+    {
+        selectedLog = log;
+        detailModalVisible = true;
+    }
+
+    /// <summary>
+    /// 从详情模态框添加到数据集
+    /// </summary>
+    private async Task OnDetailModalAddToDataset(ApiRequestLogDto log)
+    {
+        // 关闭详情模态框
+        detailModalVisible = false;
+        
+        // 显示添加数据集模态框
+        await ShowAddToDatasetModal(log);
+    }
+
+    private async Task SetDateRange(int days)
+    {
+        var today = DateTime.Today;
+        
+        if (days == 0) // 今天
+        {
+            dateRange = new DateTime[] { today, today };
+        }
+        else if (days == 1) // 昨天
+        {
+            var yesterday = today.AddDays(-1);
+            dateRange = new DateTime[] { yesterday, yesterday };
+        }
+        else // 最近N天
+        {
+            dateRange = new DateTime[] { today.AddDays(-days + 1), today };
+        }
+        
+        StateHasChanged();
+        await SearchLogs();
+    }
+
+    private async Task ClearFilters()
+    {
+        // 重置所有筛选条件
+        dateRange = null;
+        selectedStatus = null;
+        selectedProxyName = null;
+        selectedModelName = null;
+        searchPath = "";
+        
+        StateHasChanged();
+        await SearchLogs();
+    }
+
+    private bool HasActiveFilters()
+    {
+        return (dateRange != null && dateRange.Length == 2) || 
+               selectedStatus.HasValue || 
+               !string.IsNullOrWhiteSpace(selectedProxyName) ||
+               !string.IsNullOrWhiteSpace(selectedModelName) ||
+               !string.IsNullOrWhiteSpace(searchPath);
+    }
+
+    private string GetMethodColor(string method)
+    {
+        return method.ToUpper() switch
+        {
+            "GET" => "blue",
+            "POST" => "green",
+            "PUT" => "orange",
+            "DELETE" => "red",
+            "PATCH" => "purple",
+            _ => "default"
+        };
+    }
+
+    private string GetStatusColor(int status)
+    {
+        return status switch
+        {
+            >= 200 and < 300 => "success",
+            >= 300 and < 400 => "warning",
+            >= 400 and < 500 => "error",
+            >= 500 => "error",
+            _ => "default"
+        };
+    }
+
+    private bool? ParseStreamParameter(string? requestBody)
+    {
+        if (string.IsNullOrEmpty(requestBody))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(requestBody);
+            var root = doc.RootElement;
+            
+            if (root.TryGetProperty("stream", out var stream))
+            {
+                return stream.GetBoolean();
+            }
+        }
+        catch
+        {
+            // 忽略解析错误
+        }
+
+        return null;
+    }
+
+    private string ParseTokenUsage(string? tokenUsage)
+    {
+        if (string.IsNullOrEmpty(tokenUsage))
+            return "";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(tokenUsage);
+            var root = doc.RootElement;
+            
+            if (root.TryGetProperty("total_tokens", out var total))
+            {
+                return $"{total.GetInt32()} tokens";
+            }
+        }
+        catch
+        {
+            // 忽略解析错误
+        }
+
+        return "";
+    }
+
+    private string FormatJson(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return "";
+
+        // 使用 Newtonsoft.Json 递归处理多次序列化的JSON字符串
+        return FormatJsonWithNewtonsoft(json);
+    }
+
+    /// <summary>
+    /// 使用 Newtonsoft.Json 处理多次序列化的JSON字符串
+    /// </summary>
+    private string FormatJsonWithNewtonsoft(string json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return "";
+
+        var current = json.Trim();
+        
+        // 最大递归深度，防止无限循环
+        const int maxDepth = 10;
+        int depth = 0;
+        
+        while (depth < maxDepth)
+        {
+            var previous = current;
+            
+            try
+            {
+                // 尝试解析JSON
+                var parsed = JsonConvert.DeserializeObject(current);
+                
+                // 如果解析成功，处理可能的嵌套JSON并格式化输出
+                return ProcessNestedJsonAndFormat(parsed);
+            }
+            catch (Newtonsoft.Json.JsonException)
+            {
+                // 如果解析失败，检查是否是被双引号包围的JSON字符串
+                if (current.StartsWith("\"") && current.EndsWith("\"") && current.Length > 2)
+                {
+                    // 移除外层引号并尝试反转义
+                    current = current.Substring(1, current.Length - 2);
+                    
+                    // 使用JsonConvert.DeserializeObject来正确处理转义字符
+                    try
+                    {
+                        current = JsonConvert.DeserializeObject<string>(current) ?? current;
+                    }
+                    catch
+                    {
+                        // 如果反序列化失败，手动替换转义字符
+                        current = current.Replace("\\\"", "\"");
+                        current = current.Replace("\\\\", "\\");
+                        current = current.Replace("\\n", "\n");
+                        current = current.Replace("\\r", "\r");
+                        current = current.Replace("\\t", "\t");
+                    }
+                }
+                else
+                {
+                    // 如果不是被引号包围的字符串，说明已经处理完毕
+                    break;
+                }
+            }
+            
+            // 如果字符串没有变化，说明已经处理完毕
+            if (current == previous)
+                break;
+                
+            depth++;
+        }
+        
+        // 最后一次尝试格式化
+        try
+        {
+            var parsed = JsonConvert.DeserializeObject(current);
+            return ProcessNestedJsonAndFormat(parsed);
+        }
+        catch
+        {
+            // 如果仍然无法解析，返回原始字符串
+            return current;
+        }
+    }
+
+    /// <summary>
+    /// 处理嵌套JSON并格式化输出
+    /// </summary>
+    private string ProcessNestedJsonAndFormat(object? obj)
+    {
+        if (obj == null)
+            return "";
+
+        try
+        {
+            // 递归处理对象中的字符串值，检查是否包含嵌套JSON
+            var processedObj = ProcessObjectForNestedJson(obj);
+            
+            // 格式化输出
+            return JsonConvert.SerializeObject(processedObj, Formatting.Indented);
+        }
+        catch
+        {
+            // 如果处理失败，返回原始格式化
+            return JsonConvert.SerializeObject(obj, Formatting.Indented);
+        }
+    }
+
+    /// <summary>
+    /// 递归处理对象中的字符串值，检查并处理嵌套JSON
+    /// </summary>
+    private object ProcessObjectForNestedJson(object obj)
+    {
+        if (obj == null)
+            return null;
+
+        if (obj is JObject jObj)
+        {
+            var result = new JObject();
+            foreach (var prop in jObj.Properties())
+            {
+                result[prop.Name] = JToken.FromObject(ProcessObjectForNestedJson(prop.Value));
+            }
+            return result;
+        }
+        
+        if (obj is JArray jArray)
+        {
+            var result = new JArray();
+            foreach (var item in jArray)
+            {
+                result.Add(JToken.FromObject(ProcessObjectForNestedJson(item)));
+            }
+            return result;
+        }
+        
+        if (obj is JValue jValue && jValue.Type == JTokenType.String)
+        {
+            var stringValue = jValue.Value<string>();
+            if (!string.IsNullOrEmpty(stringValue))
+            {
+                // 检查字符串是否包含嵌套的JSON
+                if (IsLikelyNestedJson(stringValue))
+                {
+                    try
+                    {
+                        // 尝试解析嵌套JSON
+                        var nestedJson = JsonConvert.DeserializeObject(stringValue);
+                        if (nestedJson != null)
+                        {
+                            // 如果解析成功，将其作为对象返回（这样会在显示时保持JSON结构）
+                            return new JObject(new JProperty("_nested_json", JToken.FromObject(nestedJson)));
+                        }
+                    }
+                    catch
+                    {
+                        // 如果解析失败，返回原始字符串
+                    }
+                }
+            }
+            return jValue.Value;
+        }
+        
+        if (obj is JToken token)
+        {
+            return token;
+        }
+
+        return obj;
+    }
+
+    /// <summary>
+    /// 检查字符串是否可能包含嵌套的JSON
+    /// </summary>
+    private bool IsLikelyNestedJson(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var trimmed = text.Trim();
+        
+        // 简单检查：以 { 或 [ 开始，以 } 或 ] 结束，并且包含引号
+        return (trimmed.StartsWith("{") && trimmed.EndsWith("}") && trimmed.Contains("\"")) ||
+               (trimmed.StartsWith("[") && trimmed.EndsWith("]") && trimmed.Contains("\""));
+    }
+
+
+
+    /// <summary>
+    /// 导出Excel
+    /// </summary>
+    private async Task ExportToExcel()
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        exportLoading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // 组件已释放，直接返回
+        }
+
+        try
+        {
+            // 显示开始导出的提示
+            try
+            {
+                _ = MessageService.Info("开始导出数据，请稍候...");
+            }
+            catch (ObjectDisposedException)
+            {
+                // 组件已释放，忽略错误
+            }
+
+            // 获取要导出的数据（所有符合当前筛选条件的数据）
+            var exportData = await GetExportData();
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            if (!exportData.Any())
+            {
+                try
+                {
+                    _ = MessageService.Warning("没有数据可以导出");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+                return;
+            }
+
+            try
+            {
+                _ = MessageService.Info($"正在处理 {exportData.Count} 条记录，生成Excel文件...");
+            }
+            catch (ObjectDisposedException)
+            {
+                // 组件已释放，忽略错误
+            }
+
+            // 转换为Excel导出格式
+            var exportList = ConvertToExportDto(exportData);
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            // 使用自定义的Excel生成方法来更好地处理长文本
+            var excelBytes = GenerateDetailedExcel(exportList);
+
+            // 生成文件名
+            var fileName = $"API请求响应详情_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            // 下载文件
+            await DownloadFile(fileName, excelBytes);
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Success($"Excel导出成功！共导出 {exportList.Count} 条记录");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"导出失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        finally
+        {
+            exportLoading = false;
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 导出Log文件
+    /// </summary>
+    private async Task ExportToLog()
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        exportLoading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // 组件已释放，直接返回
+        }
+
+        try
+        {
+            // 显示开始导出的提示
+            try
+            {
+                _ = MessageService.Info("开始导出数据，请稍候...");
+            }
+            catch (ObjectDisposedException)
+            {
+                // 组件已释放，忽略错误
+            }
+
+            // 获取要导出的数据（所有符合当前筛选条件的数据）
+            var exportData = await GetExportData();
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            if (!exportData.Any())
+            {
+                try
+                {
+                    _ = MessageService.Warning("没有数据可以导出");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+                return;
+            }
+
+            try
+            {
+                _ = MessageService.Info($"正在处理 {exportData.Count} 条记录，生成Log文件...");
+            }
+            catch (ObjectDisposedException)
+            {
+                // 组件已释放，忽略错误
+            }
+
+            // 转换为Log文件格式（不截断长文本）
+            var exportList = ConvertToLogDto(exportData);
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            // 生成Log文件内容
+            var logContent = GenerateLogContent(exportList);
+            var logBytes = System.Text.Encoding.UTF8.GetBytes(logContent);
+
+            // 生成文件名
+            var fileName = $"API请求响应日志_{DateTime.Now:yyyyMMdd_HHmmss}.log";
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+
+            // 下载文件
+            await DownloadFile(fileName, logBytes);
+
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Success($"Log文件导出成功！共导出 {exportList.Count} 条记录");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"导出失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        finally
+        {
+            exportLoading = false;
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 生成简化的Excel文件，专注于请求体和响应体
+    /// </summary>
+    private byte[] GenerateDetailedExcel(List<ApiRequestLogExportDto> data)
+    {
+        var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook();
+        var sheet = workbook.CreateSheet("API请求响应详情");
+        
+        // 创建样式
+        var headerStyle = workbook.CreateCellStyle();
+        var headerFont = workbook.CreateFont();
+        headerFont.IsBold = true;
+        headerFont.FontHeightInPoints = 12;
+        headerStyle.SetFont(headerFont);
+        headerStyle.FillForegroundColor = NPOI.HSSF.Util.HSSFColor.Grey25Percent.Index;
+        headerStyle.FillPattern = NPOI.SS.UserModel.FillPattern.SolidForeground;
+        headerStyle.BorderBottom = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderTop = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderLeft = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderRight = NPOI.SS.UserModel.BorderStyle.Thin;
+        
+        var cellStyle = workbook.CreateCellStyle();
+        cellStyle.WrapText = true; // 启用文本换行
+        cellStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Top;
+        cellStyle.BorderBottom = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderTop = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderLeft = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderRight = NPOI.SS.UserModel.BorderStyle.Thin;
+
+        // 简化的列定义
+        var columns = new[]
+        {
+            new { Name = "请求ID", Width = 8000, Property = "RequestId" },
+            new { Name = "请求时间", Width = 4000, Property = "RequestTimeFormatted" },
+            new { Name = "代理名称", Width = 3000, Property = "ProxyName" },
+            new { Name = "请求路径", Width = 8000, Property = "RequestPath" },
+            new { Name = "状态码", Width = 2000, Property = "ResponseStatusCode" },
+            new { Name = "请求体", Width = 30000, Property = "RequestBody" },
+            new { Name = "响应体", Width = 30000, Property = "ResponseBody" }
+        };
+
+        // 设置列宽
+        for (int i = 0; i < columns.Length; i++)
+        {
+            sheet.SetColumnWidth(i, columns[i].Width);
+        }
+
+        // 创建表头
+        var headerRow = sheet.CreateRow(0);
+        headerRow.Height = 600;
+        
+        for (int i = 0; i < columns.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(columns[i].Name);
+            cell.CellStyle = headerStyle;
+        }
+
+        // 填充数据
+        for (int i = 0; i < data.Count; i++)
+        {
+            var row = sheet.CreateRow(i + 1);
+            var item = data[i];
+            
+            for (int j = 0; j < columns.Length; j++)
+            {
+                var cell = row.CreateCell(j);
+                cell.CellStyle = cellStyle;
+                
+                var value = GetPropertyValue(item, columns[j].Property)?.ToString() ?? "";
+                
+                // 直接设置值，因为已经在ConvertToExportDto中处理了长度
+                cell.SetCellValue(value);
+            }
+            
+            // 为包含长文本的行设置较大的行高
+            row.Height = 2000; // 设置固定行高
+        }
+
+        // 冻结表头
+        sheet.CreateFreezePane(0, 1);
+
+        // 生成字节数组
+        using var memoryStream = new MemoryStream();
+        workbook.Write(memoryStream);
+        return memoryStream.ToArray();
+    }
+
+    /// <summary>
+    /// 反射获取属性值
+    /// </summary>
+    private object? GetPropertyValue(object obj, string propertyName)
+    {
+        return obj.GetType().GetProperty(propertyName)?.GetValue(obj);
+    }
+
+    /// <summary>
+    /// 截断过长的文本以符合Excel限制
+    /// </summary>
+    private string TruncateIfTooLong(string text)
+    {
+        const int maxLength = 32000; // 留一些余量，避免超过32767的限制
+        
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        {
+            return text;
+        }
+        
+        // 截断文本并添加提示
+        var truncated = text.Substring(0, maxLength - 100);
+        return truncated + "\n\n[注意：内容过长已截断，完整内容请查看系统日志或数据库]";
+    }
+
+    /// <summary>
+    /// 获取导出数据（所有符合筛选条件的数据）
+    /// </summary>
+    private async Task<List<ApiRequestLogDto>> GetExportData()
+    {
+        // 如果选择了代理名称，先获取对应的ProxyConfigId
+        Guid? selectedProxyConfigId = null;
+        if (!string.IsNullOrWhiteSpace(selectedProxyName))
+        {
+            try
+            {
+                var allConfigs = await ProxyService.GetAllConfigsAsync();
+                var selectedConfig = allConfigs.FirstOrDefault(c => c.Name == selectedProxyName);
+                selectedProxyConfigId = selectedConfig?.Id;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"查询代理配置失败：{ex.Message}");
+            }
+        }
+
+        // 构建筛选条件
+        Expression<Func<ApiRequestLog, bool>> whereExpression = BuildWhereExpression(selectedProxyConfigId);
+
+        // 分批获取所有数据（避免内存问题）
+        var allData = new List<ApiRequestLogDto>();
+        var pageIndex = 1;
+        var pageSize = 5000; // 使用较小的批次大小避免内存问题
+        bool hasMoreData = true;
+
+        while (hasMoreData && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+        {
+            var page = new SqlSugar.PageModel { PageIndex = pageIndex, PageSize = pageSize };
+            
+            var result = await LogRepository.GetLogsWithProxyInfoAsync(
+                whereExpression, 
+                page, 
+                null, 
+                selectedModelName, 
+                SqlSugar.OrderByType.Desc);
+
+            if (result.List?.Any() == true)
+            {
+                allData.AddRange(result.List);
+                hasMoreData = result.List.Count == pageSize; // 如果返回的数据少于页面大小，说明已经是最后一批
+                pageIndex++;
+            }
+            else
+            {
+                hasMoreData = false;
+            }
+        }
+
+        return allData;
+    }
+
+    /// <summary>
+    /// 转换为Excel导出DTO（仅请求体和响应体）
+    /// </summary>
+    private List<ApiRequestLogExportDto> ConvertToExportDto(List<ApiRequestLogDto> logs)
+    {
+        return logs.Select(log => new ApiRequestLogExportDto
+        {
+            RequestId = log.RequestId,
+            RequestTimeFormatted = log.RequestTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            ProxyName = log.ProxyName,
+            RequestPath = log.RequestPath,
+            ResponseStatusCode = log.ResponseStatusCode,
+            RequestBody = TruncateIfTooLong(FormatJson(log.RequestBody)),
+            ResponseBody = TruncateIfTooLong(GetProcessedResponseBodyForExcel(log))
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 处理Excel导出的响应体：如果是流式请求则合并并格式化，否则格式化原始响应体
+    /// </summary>
+    private string GetProcessedResponseBodyForExcel(ApiRequestLogDto log)
+    {
+        // 检查是否为流式请求
+        var isStream = ParseStreamParameter(log.RequestBody);
+        
+        if (isStream == true && !string.IsNullOrEmpty(log.ResponseBody))
+        {
+            // 流式请求：使用合并逻辑
+            var mergedResponse = ParseAndMergeStreamResponse(log.ResponseBody);
+            return FormatJson(mergedResponse);
+        }
+        else
+        {
+            // 非流式请求：格式化原始响应体
+            return FormatJson(log.ResponseBody);
+        }
+    }
+
+    /// <summary>
+    /// 转换为Log文件导出DTO（不截断长文本）
+    /// </summary>
+    private List<ApiRequestLogExportDto> ConvertToLogDto(List<ApiRequestLogDto> logs)
+    {
+        return logs.Select(log => new ApiRequestLogExportDto
+        {
+            RequestId = log.RequestId,
+            RequestTimeFormatted = log.RequestTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            ProxyName = log.ProxyName,
+            RequestPath = log.RequestPath,
+            ResponseStatusCode = log.ResponseStatusCode,
+            RequestBody = log.RequestBody ?? "", // 直接使用原始数据，不进行FormatJson处理
+            ResponseBody = GetProcessedResponseBody(log) // 根据流式情况处理响应体
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 处理响应体：如果是流式请求则合并，否则返回原始响应体
+    /// </summary>
+    private string GetProcessedResponseBody(ApiRequestLogDto log)
+    {
+        // 检查是否为流式请求
+        var isStream = ParseStreamParameter(log.RequestBody);
+        
+        if (isStream == true && !string.IsNullOrEmpty(log.ResponseBody))
+        {
+            // 流式请求：使用合并逻辑
+            return ParseAndMergeStreamResponse(log.ResponseBody);
+        }
+        else
+        {
+            // 非流式请求：返回原始响应体
+            return log.ResponseBody ?? "";
+        }
+    }
+
+    /// <summary>
+    /// 生成Log文件内容（每行一个JSON对象）
+    /// </summary>
+    private string GenerateLogContent(List<ApiRequestLogExportDto> exportList)
+    {
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = false, // 不使用缩进，保持每行一个JSON对象
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        var logLines = exportList.Select(item => 
+        {
+            // 创建JSON对象，保持与Excel相同的结构
+            var logObject = new
+            {
+                requestId = item.RequestId,
+                requestTime = item.RequestTimeFormatted,
+                proxyName = item.ProxyName,
+                requestPath = item.RequestPath,
+                responseStatusCode = item.ResponseStatusCode,
+                requestBody = DecodeUnicodeString(item.RequestBody),
+                responseBody = DecodeUnicodeString(item.ResponseBody)
+            };
+            
+            return System.Text.Json.JsonSerializer.Serialize(logObject, jsonOptions);
+        });
+
+        return string.Join(Environment.NewLine, logLines);
+    }
+
+    /// <summary>
+    /// 解析流式响应并合并内容
+    /// </summary>
+    private string ParseAndMergeStreamResponse(string? responseBody)
+    {
+        if (string.IsNullOrEmpty(responseBody))
+            return "";
+
+        try
+        {
+            var lines = responseBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var contentBuilder = new System.Text.StringBuilder();
+            var reasoningContentBuilder = new System.Text.StringBuilder();
+            string? chatId = null;
+            string? modelName = null;
+            int lineIndex = 0;
+            
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("data: [DONE]"))
+                    continue;
+                    
+                lineIndex++;
+                
+                // 移除 "data: " 前缀
+                if (trimmedLine.StartsWith("data: "))
+                {
+                    trimmedLine = trimmedLine.Substring(6);
+                }
+                
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(trimmedLine);
+                    var root = doc.RootElement;
+                    
+                    // 从第二条消息开始解析id和model（第一条通常为空）
+                    if (lineIndex >= 2)
+                    {
+                        if (chatId == null && root.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
+                        {
+                            chatId = idElement.GetString();
+                        }
+                        
+                        if (modelName == null && root.TryGetProperty("model", out var modelElement) && modelElement.ValueKind == JsonValueKind.String)
+                        {
+                            modelName = modelElement.GetString();
+                        }
+                    }
+                    
+                    // 检查是否有choices数组
+                    if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var choice in choices.EnumerateArray())
+                        {
+                            // 流式响应只提取 delta 中的内容，避免重复
+                            if (choice.TryGetProperty("delta", out var delta))
+                            {
+                                if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+                                {
+                                    contentBuilder.Append(content.GetString());
+                                }
+                                
+                                if (delta.TryGetProperty("reasoning_content", out var reasoningContent) && reasoningContent.ValueKind == JsonValueKind.String)
+                                {
+                                    reasoningContentBuilder.Append(reasoningContent.GetString());
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // 忽略无法解析的行
+                    continue;
+                }
+            }
+            
+            // 构建标准的ChatCompletion响应格式，包含合并后的内容
+            var mergedResponse = new
+            {
+                id = chatId ?? "merged-response",
+                model = modelName ?? "merged-stream",
+                @object = "chat.completion",
+                choices = new[]
+                {
+                    new
+                    {
+                        index = 0,
+                        message = new
+                        {
+                            role = "assistant",
+                            content = contentBuilder.ToString(),
+                            reasoning_content = reasoningContentBuilder.ToString()
+                        },
+                        finish_reason = "stop"
+                    }
+                },
+                usage = new
+                {
+                    content_length = contentBuilder.Length,
+                    reasoning_content_length = reasoningContentBuilder.Length,
+                    total_chunks_merged = lineIndex
+                },
+                created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                merged_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+            
+            return System.Text.Json.JsonSerializer.Serialize(mergedResponse, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch (Exception ex)
+        {
+            return $"解析流式响应失败: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 解码Unicode转义字符串
+    /// </summary>
+    private string DecodeUnicodeString(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        try
+        {
+            // 使用System.Text.RegularExpressions.Regex来解码Unicode转义字符
+            return System.Text.RegularExpressions.Regex.Unescape(input);
+        }
+        catch (Exception)
+        {
+            // 如果解码失败，返回原字符串
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// 下载文件
+    /// </summary>
+    private async Task DownloadFile(string fileName, byte[] fileBytes)
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        try
+        {
+            var base64 = Convert.ToBase64String(fileBytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+        }
+        catch (JSDisconnectedException)
+        {
+            // JavaScript连接已断开，忽略错误
+        }
+        catch (ObjectDisposedException)
+        {
+            // 组件已释放，忽略错误
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，忽略错误
+        }
+    }
+
+    /// <summary>
+    /// 显示添加到数据集模态框
+    /// </summary>
+    private async Task ShowAddToDatasetModal(ApiRequestLogDto log)
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        currentLogForDataset = log;
+        
+        // 重置表单状态
+        selectedDatasetId = null;
+        datasetTags.Clear();
+        datasetRemarks = "";
+        datasetDifficulty = null;
+        datasetQuality = null;
+        availableDatasets.Clear();
+        
+        // 先显示模态框（避免异步加载时的渲染问题）
+        addToDatasetModalVisible = true;
+        
+        try
+        {
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // 组件已释放，直接返回
+        }
+        
+        // 加载可用的数据集
+        try
+        {
+            if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+                return;
+                
+            var datasets = await DatasetService.GetActiveDatasetListAsync();
+            
+            // 检查组件是否仍然存在且未被取消
+            if (addToDatasetModalVisible && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                availableDatasets = datasets;
+                try
+                {
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (addToDatasetModalVisible && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"加载数据集列表失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 添加到数据集
+    /// </summary>
+    private async Task AddToDataset()
+    {
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        if (currentLogForDataset == null || !selectedDatasetId.HasValue)
+        {
+            try
+            {
+                _ = MessageService.Warning("请选择数据集");
+            }
+            catch (ObjectDisposedException)
+            {
+                // 组件已释放，忽略错误
+            }
+            return;
+        }
+
+        if (_cancellationTokenSource?.Token.IsCancellationRequested == true)
+            return;
+            
+        addToDatasetLoading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // 组件已释放，直接返回
+        }
+
+        try
+        {
+            var request = new MME.Domain.Repositories.Dataset.AddFromRequestLogRequest
+            {
+                DatasetId = selectedDatasetId.Value,
+                RequestLogIds = new List<string> { currentLogForDataset.RequestId },
+                Tags = datasetTags.ToList(),
+                Remarks = datasetRemarks,
+                Difficulty = datasetDifficulty,
+                Quality = datasetQuality
+            };
+
+            var result = await DatasetService.AddFromRequestLogsAsync(request);
+            
+            // 检查组件是否仍然存在且未被取消
+            if (addToDatasetModalVisible && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                if (result.Success)
+                {
+                    try
+                    {
+                        _ = MessageService.Success(result.Message);
+                        CloseAddToDatasetModal();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // 组件已释放，忽略错误
+                    }
+                    return; // 提前返回，避免在finally块中重复调用StateHasChanged
+                }
+                else
+                {
+                    try
+                    {
+                        _ = MessageService.Error(result.Message);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // 组件已释放，忽略错误
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 操作被取消，不需要处理
+        }
+        catch (Exception ex)
+        {
+            if (addToDatasetModalVisible && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    _ = MessageService.Error($"添加失败：{ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+        finally
+        {
+            addToDatasetLoading = false;
+            if (addToDatasetModalVisible && _cancellationTokenSource?.Token.IsCancellationRequested == false)
+            {
+                try
+                {
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 组件已释放，忽略错误
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 添加数据集标签
+    /// </summary>
+    private void AddDatasetTag()
+    {
+        if (!string.IsNullOrWhiteSpace(datasetTagsInput))
+        {
+            var tags = datasetTagsInput.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .Where(t => !string.IsNullOrEmpty(t) && !datasetTags.Contains(t));
+
+            datasetTags.AddRange(tags);
+            datasetTagsInput = "";
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 移除数据集标签
+    /// </summary>
+    private void RemoveDatasetTag(string tag)
+    {
+        datasetTags.Remove(tag);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 关闭添加到数据集模态框
+    /// </summary>
+    private void CloseAddToDatasetModal()
+    {
+        addToDatasetModalVisible = false;
+        currentLogForDataset = null;
+        
+        // 清理表单状态
+        selectedDatasetId = null;
+        datasetTags.Clear();
+        datasetRemarks = "";
+        datasetDifficulty = null;
+        datasetQuality = null;
+        datasetTagsInput = "";
+        addToDatasetLoading = false;
+        
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 数据集表单模型
+    /// </summary>
+    public class DatasetFormModel
+    {
+        public Guid? SelectedDatasetId { get; set; }
+        public string TagsInput { get; set; } = "";
+        public string Remarks { get; set; } = "";
+        public int? Difficulty { get; set; }
+        public int? Quality { get; set; }
+    }
+
+
+}
+
+<!-- 添加到数据集模态框 -->
+<Modal Title="添加到数据集" 
+       Visible="@addToDatasetModalVisible" 
+       Width="600"
+       OnCancel="CloseAddToDatasetModal"
+       OnOk="AddToDataset"
+       ConfirmLoading="@addToDatasetLoading">
+    @if (currentLogForDataset != null)
+    {
+        <div style="margin-bottom: 16px;">
+            <Alert Type="@AlertType.Info" ShowIcon="true" Closable="false">
+                <MessageTemplate>
+                    <Text>将要添加的请求：<Text Code>@currentLogForDataset.RequestPath</Text></Text>
+                    <br />
+                    <Text>请求时间：@currentLogForDataset.RequestTime.ToString("yyyy-MM-dd HH:mm:ss")</Text>
+                    @if (!string.IsNullOrEmpty(currentLogForDataset.ModelName))
+                    {
+                        <br />
+                        <Text>模型：@currentLogForDataset.ModelName</Text>
+                    }
+                </MessageTemplate>
+            </Alert>
+        </div>
+
+        <Form Model="datasetFormModel" Layout="@FormLayout.Vertical">
+            <FormItem Label="选择数据集" Required>
+                <Select @bind-Value="selectedDatasetId" TItemValue="Guid?" TItem="Guid" Placeholder="请选择数据集" Style="width: 100%">
+                    <SelectOptions>
+                        @foreach (var dataset in availableDatasets)
+                        {
+                            <SelectOption TItemValue="Guid?" TItem="Guid" Label="@($"{dataset.Name} ({dataset.TypeText} • {dataset.ItemCount} 项)")" Value="@dataset.Id" />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+
+            <FormItem Label="标签">
+                <Input @bind-Value="@datasetTagsInput" Placeholder="输入标签，用逗号分隔" OnPressEnter="AddDatasetTag" />
+                @if (datasetTags.Any())
+                {
+                    <div style="margin-top: 8px;">
+                        @foreach (var tag in datasetTags)
+                        {
+                            <Tag Closable OnClose="() => RemoveDatasetTag(tag)" Style="margin-bottom: 4px;">
+                                @tag
+                            </Tag>
+                        }
+                    </div>
+                }
+            </FormItem>
+
+            <FormItem Label="备注">
+                <TextArea @bind-Value="datasetRemarks" Placeholder="添加备注信息" Rows="3" />
+            </FormItem>
+
+            <div style="display: flex; gap: 16px;">
+                <FormItem Label="难度等级" Style="flex: 1;">
+                    <Select @bind-Value="datasetDifficulty" TItemValue="int?" TItem="int" Placeholder="选择难度" AllowClear>
+                        <SelectOptions>
+                            <SelectOption TItemValue="int?" TItem="int" Label="1 - 很简单" Value="1" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="2 - 简单" Value="2" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="3 - 中等" Value="3" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="4 - 困难" Value="4" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="5 - 很困难" Value="5" />
+                        </SelectOptions>
+                    </Select>
+                </FormItem>
+
+                <FormItem Label="质量评分" Style="flex: 1;">
+                    <Select @bind-Value="datasetQuality" TItemValue="int?" TItem="int" Placeholder="选择质量" AllowClear>
+                        <SelectOptions>
+                            <SelectOption TItemValue="int?" TItem="int" Label="1 - 很差" Value="1" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="2 - 差" Value="2" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="3 - 一般" Value="3" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="4 - 好" Value="4" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="5 - 很好" Value="5" />
+                        </SelectOptions>
+                    </Select>
+                </FormItem>
+            </div>
+        </Form>
+    }
+</Modal>
+
+<style>
+    .request-logs-container {
+        padding: 16px 24px;
+        background: #f5f5f5;
+        min-height: calc(100vh - 64px);
+    }
+
+    .logs-header {
+        background: #fff;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .logs-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    /* 筛选区域样式 */
+    .filters-section {
+        margin-bottom: 24px;
+    }
+
+    .filter-groups {
+        background: #fafafa;
+        border-radius: 8px;
+        padding: 20px;
+        border: 1px solid #e8e8e8;
+    }
+
+    .filter-group {
+        margin-bottom: 16px;
+    }
+
+    .filter-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .filter-label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #262626;
+        font-size: 14px;
+    }
+
+    .filter-content {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .date-picker {
+        min-width: 280px;
+    }
+
+    .quick-date-buttons {
+        display: flex;
+        gap: 4px;
+        margin-left: 12px;
+    }
+
+    .filter-actions {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e8e8e8;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    /* 筛选结果提示样式 */
+    .filter-result {
+        margin-bottom: 20px;
+    }
+
+    .filter-alert {
+        border-radius: 8px;
+    }
+
+    .filter-tags {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .filter-tag {
+        margin: 0 !important;
+    }
+
+    .result-count {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* 表格样式 */
+    .table-container {
+        margin-bottom: 20px;
+    }
+
+    .logs-table {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .time-cell {
+        display: flex;
+        align-items: center;
+        font-size: 12px;
+    }
+
+    .path-cell {
+        max-width: 240px;
+    }
+
+    .path-text {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    .method-tag {
+        font-weight: 600;
+        font-size: 11px;
+    }
+
+    .detail-btn {
+        padding: 0;
+        height: auto;
+    }
+
+    /* 耗时颜色样式 */
+    .duration-fast {
+        color: #52c41a;
+        font-weight: 600;
+    }
+
+    .duration-normal {
+        color: #7F7FFF;
+        font-weight: 600;
+    }
+
+    .duration-slow {
+        color: #faad14;
+        font-weight: 600;
+    }
+
+    .duration-very-slow {
+        color: #ff4d4f;
+        font-weight: 600;
+    }
+
+    /* 分页样式 */
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 20px;
+        border-top: 1px solid #e8e8e8;
+    }
+
+    .pagination-info {
+        color: #8c8c8c;
+        font-size: 14px;
+    }
+
+    .logs-pagination {
+        margin: 0;
+    }
+
+    /* 详情模态框样式 */
+    .detail-modal .ant-modal-content {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .detail-tabs {
+        margin-top: -16px;
+    }
+
+    .detail-section {
+        padding: 16px 0;
+    }
+
+    .detail-descriptions {
+        margin-bottom: 0;
+    }
+
+    .json-section {
+        margin-bottom: 24px;
+    }
+
+    .json-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .json-container {
+        background: #1f1f1f;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 8px;
+        border: 1px solid #e8e8e8;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .json-content {
+        color: #d4d4d4;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* 响应式设计 */
+    @@media (max-width: 1200px) {
+        .filter-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .quick-date-buttons {
+            margin-left: 0;
+            margin-top: 8px;
+        }
+
+        .pagination-container {
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .request-logs-container {
+            padding: 12px;
+        }
+
+        .filter-groups {
+            padding: 16px 12px;
+        }
+
+        .date-picker {
+            min-width: 100%;
+        }
+    }
+</style> 

@@ -1,0 +1,681 @@
+@page "/user-guide"
+@using AntDesign
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@attribute [Authorize]
+@implements IDisposable
+@inject NavigationManager Navigation
+
+<PageTitle>使用手册</PageTitle>
+
+<div class="page-container">
+    <PageHeader Title="使用手册" SubTitle="完整的操作指南，帮助您快速上手MME系统">
+        <PageHeaderExtra>
+            <Button Type="@ButtonType.Default" Icon="question-circle" OnClick="ShowHelpModal">
+                常见问题
+            </Button>
+        </PageHeaderExtra>
+    </PageHeader>
+
+    <Card>
+        <Tabs @bind-ActiveKey="activeTabKey" Size="@TabSize.Large" Type="@TabType.Card">
+            <!-- 代理配置指南 -->
+            <TabPane Key="1" Tab="代理配置指南">
+                <div class="tab-content">
+                    <div class="section-header">
+                        <Title Level="3">
+                            <Icon Type="setting" Style="margin-right: 8px; color: #7F7FFF;" />
+                            代理配置管理
+                        </Title>
+                        <Paragraph>
+                            代理配置用于管理多个OpenAI API配置，实现智能代理转发功能。
+                        </Paragraph>
+                    </div>
+
+                    <div class="guide-steps">
+                        @* 使用简化的步骤展示 *@
+                        <div class="step-item">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <Title Level="4">访问代理配置页面</Title>
+                                <Paragraph>点击左侧导航栏的「代理配置」菜单项</Paragraph>
+                                <Alert Type="@AlertType.Info" ShowIcon="true" Message="提示" 
+                                       Description="确保您已登录系统并具有管理权限" />
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <Title Level="4">创建新的代理配置</Title>
+                                <Paragraph>点击页面右上角的「添加配置」按钮</Paragraph>
+                                
+                                <Row Gutter="16">
+                                    <Col Span="12">
+                                        <Card Title="必填信息" Size="@CardSize.Small" class="info-card">
+                                            <Descriptions Column="1" Size="@DescriptionsSize.Small">
+                                                <DescriptionsItem Title="配置名称">便于识别的配置名称，如"OpenAI官方"、"Azure OpenAI"等</DescriptionsItem>
+                                                <DescriptionsItem Title="目标地址">API服务的基础URL，如 https://api.openai.com</DescriptionsItem>
+                                                <DescriptionsItem Title="API密钥">目标服务的有效API Key</DescriptionsItem>
+                                            </Descriptions>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="12">
+                                        <Card Title="高级配置" Size="@CardSize.Small" class="info-card">
+                                            <Descriptions Column="1" Size="@DescriptionsSize.Small">
+                                                <DescriptionsItem Title="超时时间">请求超时时间，建议300-3000秒</DescriptionsItem>
+                                                <DescriptionsItem Title="重试次数">失败重试次数，建议0-3次</DescriptionsItem>
+                                                <DescriptionsItem Title="日志记录">是否记录请求和响应体用于调试</DescriptionsItem>
+                                            </Descriptions>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <Title Level="4">选择支持的接口</Title>
+                                <Paragraph>根据需要选择要代理的API接口类型</Paragraph>
+                                
+                                <Row Gutter="16">
+                                    <Col Span="12">
+                                        <Card class="api-card">
+                                            <div class="api-item">
+                                                <Tag>聊天对话接口</Tag>
+                                                <Text>聊天对话接口</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="12">
+                                        <Card class="api-card">
+                                            <div class="api-item">
+                                                <Tag>文本向量化接口</Tag>
+                                                <Text>文本向量化接口</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                                <Row Gutter="16" style="margin-top: 12px;">
+                                    <Col Span="12">
+                                        <Card class="api-card">
+                                            <div class="api-item">
+                                                <Tag>重排序接口</Tag>
+                                                <Text>重排序接口</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="12">
+                                        <Card class="api-card">
+                                            <div class="api-item">
+                                                <Tag>模型列表接口</Tag>
+                                                <Text>模型列表接口</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <Title Level="4">使用代理API</Title>
+                                <Paragraph>配置完成后，系统会自动生成Bearer Token</Paragraph>
+                                
+                                <Alert Type="@AlertType.Success" ShowIcon="true" Message="使用示例" 
+                                       Description="复制生成的Bearer Token，在API请求中使用Authorization头部" />
+                                
+                                <Card Title="cURL示例" class="code-card">
+                                    <div class="code-block">
+<pre>curl -X POST @(Navigation.BaseUri)v1/chat/completions \
+  -H "Authorization: Bearer your_bearer_token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'</pre>
+                                    </div>
+                                </Card>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </TabPane>
+
+            <!-- 查看日志指南 -->
+            <TabPane Key="2" Tab="查看日志指南">
+                <div class="tab-content">
+                    <div class="section-header">
+                        <Title Level="3">
+                            <Icon Type="file-text" Style="margin-right: 8px; color: #52c41a;" />
+                            请求日志查看
+                        </Title>
+                        <Paragraph>
+                            系统会自动记录所有通过代理的API请求和响应，帮助您分析使用情况和排查问题。
+                        </Paragraph>
+                    </div>
+
+                    <div class="guide-steps">
+                        <div class="step-item">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <Title Level="4">访问请求日志页面</Title>
+                                <Paragraph>点击左侧导航栏的「请求日志」菜单项</Paragraph>
+                                <Alert Type="@AlertType.Info" ShowIcon="true" Message="提示" 
+                                       Description="日志页面会显示所有代理配置的请求记录" />
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <Title Level="4">使用筛选功能</Title>
+                                <Paragraph>根据需要筛选查看特定的日志记录</Paragraph>
+                                
+                                <Row Gutter="16">
+                                    <Col Span="8">
+                                        <Card Title="代理配置筛选" Size="@CardSize.Small" class="filter-card">
+                                            <Text>选择特定的代理配置查看对应的请求日志</Text>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="8">
+                                        <Card Title="时间范围筛选" Size="@CardSize.Small" class="filter-card">
+                                            <Text>选择开始和结束时间查看特定时间段的日志</Text>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="8">
+                                        <Card Title="状态码筛选" Size="@CardSize.Small" class="filter-card">
+                                            <Text>筛选成功(2xx)或失败(4xx/5xx)的请求</Text>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <Title Level="4">查看详细信息</Title>
+                                <Paragraph>点击日志记录查看详细的请求和响应内容</Paragraph>
+                                
+                                <Descriptions Column="2" Size="@DescriptionsSize.Small" Bordered>
+                                    <DescriptionsItem Title="请求时间" Span="1">记录API调用的精确时间</DescriptionsItem>
+                                    <DescriptionsItem Title="响应时间" Span="1">API响应耗时（毫秒）</DescriptionsItem>
+                                    <DescriptionsItem Title="状态码" Span="1">HTTP状态码，200表示成功</DescriptionsItem>
+                                    <DescriptionsItem Title="请求路径" Span="1">调用的API接口路径</DescriptionsItem>
+                                    <DescriptionsItem Title="请求体" Span="2">完整的请求参数（如果启用日志记录）</DescriptionsItem>
+                                    <DescriptionsItem Title="响应体" Span="2">完整的响应内容（如果启用日志记录）</DescriptionsItem>
+                                </Descriptions>
+                            </div>
+                        </div>
+
+                        <div class="step-item">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <Title Level="4">导出日志数据</Title>
+                                <Paragraph>支持导出日志数据进行离线分析</Paragraph>
+                                
+                                <Alert Type="@AlertType.Warning" ShowIcon="true" Message="注意" 
+                                       Description="导出的日志可能包含敏感信息，请妥善保管" />
+                                
+                                <Row Gutter="16">
+                                    <Col Span="12">
+                                        <Card class="export-card">
+                                            <div class="export-item">
+                                                <Tag>Excel格式</Tag>
+                                                <Text>适合数据分析和制作报表</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                    <Col Span="12">
+                                        <Card class="export-card">
+                                            <div class="export-item">
+                                                <Tag>CSV格式</Tag>
+                                                <Text>适合程序处理和数据导入</Text>
+                                            </div>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </TabPane>
+
+            <!-- 数据集维护指南 -->
+            <TabPane Key="3" Tab="数据集维护指南">
+                <div class="tab-content">
+                    <div class="section-header">
+                        <Title Level="3">
+                            <Icon Type="database" Style="margin-right: 8px; color: #fa8c16;" />
+                            数据集管理
+                        </Title>
+                        <Paragraph>
+                            数据集是进行模型评测的基础，支持QA、Chat、Completion等多种类型。
+                        </Paragraph>
+                    </div>
+
+                    <div class="dataset-tabs-container">
+                        <div class="dataset-tag-tabs">
+                            <Tag Color="@(selectedDatasetTab == "create" ? "blue" : "default")" 
+                                 OnClick="@(() => OnDatasetTabChange("create"))"
+                                 Style="cursor: pointer; margin-right: 8px; font-size: 14px; padding: 6px 12px;">
+                                创建数据集
+                            </Tag>
+                            <Tag Color="@(selectedDatasetTab == "manage" ? "blue" : "default")" 
+                                 OnClick="@(() => OnDatasetTabChange("manage"))"
+                                 Style="cursor: pointer; margin-right: 8px; font-size: 14px; padding: 6px 12px;">
+                                管理数据集
+                            </Tag>
+                            <Tag Color="@(selectedDatasetTab == "quality" ? "blue" : "default")" 
+                                 OnClick="@(() => OnDatasetTabChange("quality"))"
+                                 Style="cursor: pointer; font-size: 14px; padding: 6px 12px;">
+                                数据质量
+                            </Tag>
+                        </div>
+
+                        <div class="dataset-tab-content">
+                            @if (selectedDatasetTab == "create")
+                            {
+                                <div class="dataset-guide">
+                                    <Card Title="创建新数据集" class="guide-card">
+                                        <Descriptions Column="1" Size="@DescriptionsSize.Small" Bordered>
+                                            <DescriptionsItem Title="数据集名称">使用有意义的名称，便于后续管理</DescriptionsItem>
+                                            <DescriptionsItem Title="数据集类型">
+                                                <Space>
+                                                    <SpaceItem><Tag Color="TagColor.Green">QA</Tag> 问答对数据集</SpaceItem>
+                                                    <SpaceItem><Tag Color="TagColor.Blue">Chat</Tag> 多轮对话数据集</SpaceItem>
+                                                    <SpaceItem><Tag Color="TagColor.Orange">Completion</Tag> 文本完成数据集</SpaceItem>
+                                                </Space>
+                                            </DescriptionsItem>
+                                            <DescriptionsItem Title="描述信息">详细描述数据集的用途和内容</DescriptionsItem>
+                                            <DescriptionsItem Title="标签管理">使用标签对数据集进行分类管理</DescriptionsItem>
+                                        </Descriptions>
+                                    </Card>
+
+                                    <Card Title="添加数据项" class="guide-card">
+                                        <AntDesign.Row Gutter="16">
+                                            <AntDesign.Col Span="12">
+                                                <Card Title="手动添加" Size="@CardSize.Small" class="method-card">
+                                                    <Text>逐条添加数据项，适合少量高质量数据</Text>
+                                                </Card>
+                                            </AntDesign.Col>
+                                            <AntDesign.Col Span="12">
+                                                <Card Title="批量导入" Size="@CardSize.Small" class="method-card">
+                                                    <Text>支持Excel、CSV、JSON格式批量导入</Text>
+                                                </Card>
+                                            </AntDesign.Col>
+                                        </AntDesign.Row>
+                                    </Card>
+                                </div>
+                            }
+                            else if (selectedDatasetTab == "manage")
+                            {
+                                <div class="dataset-guide">
+                                    <Alert Type="@AlertType.Info" ShowIcon="true" Message="提示" 
+                                           Description="可以按名称、类型、状态等条件筛选数据集" />
+
+                                    <Card Title="可编辑内容" class="guide-card">
+                                        <ul class="edit-list">
+                                            <li>数据集名称和描述</li>
+                                            <li>标签和分类信息</li>
+                                            <li>数据集状态（活跃/归档）</li>
+                                            <li>单个数据项的内容</li>
+                                        </ul>
+                                    </Card>
+
+                                    <Card Title="导出选项" class="guide-card">
+                                        <AntDesign.Row Gutter="16">
+                                            <AntDesign.Col Span="12">
+                                                <div class="export-option">
+                                                <Tag Color="TagColor.Green">Excel导出</Tag>
+                                                    <Text>包含完整的数据项信息，便于离线查看和编辑</Text>
+                                                </div>
+                                            </AntDesign.Col>
+                                            <AntDesign.Col Span="12">
+                                                <div class="export-option">
+                                                <Tag Color="TagColor.Purple">Log导出</Tag>
+                                                    <Text>适合模型训练和程序处理的格式</Text>
+                                                </div>
+                                            </AntDesign.Col>
+                                        </AntDesign.Row>
+                                    </Card>
+                                </div>
+                            }
+                            else if (selectedDatasetTab == "quality")
+                            {
+                                <div class="dataset-guide">
+                                    <Alert Type="@AlertType.Warning" ShowIcon="true" Message="数据质量建议">
+                                        <ul class="quality-tips">
+                                            <li>确保数据的准确性和一致性</li>
+                                            <li>避免重复或相似的数据项</li>
+                                            <li>为数据项添加适当的难度和质量评分</li>
+                                            <li>定期清理和更新过时的数据</li>
+                                        </ul>
+                                    </Alert>
+                                    
+                                    <Card Title="质量评估标准" class="guide-card">
+                                        <Descriptions Column="2" Size="@DescriptionsSize.Small" Bordered>
+                                            <DescriptionsItem Title="难度评分" Span="1">1-5分，5分为最难</DescriptionsItem>
+                                            <DescriptionsItem Title="质量评分" Span="1">1-5分，5分为最高质量</DescriptionsItem>
+                                            <DescriptionsItem Title="数据来源" Span="1">记录数据的来源便于追溯</DescriptionsItem>
+                                            <DescriptionsItem Title="验证状态" Span="1">标记数据是否已验证</DescriptionsItem>
+                                        </Descriptions>
+                                    </Card>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </TabPane>
+        </Tabs>
+    </Card>
+</div>
+
+<!-- 常见问题模态框 -->
+<Modal Title="常见问题" @bind-Visible="helpModalVisible" Footer="null" Width="800" OnCancel="() => helpModalVisible = false">
+    <Collapse DefaultActiveKey="@(new string[]{"1"})">
+        <Panel Key="1" Header="代理配置相关问题">
+            <div class="faq-content">
+                <div class="faq-item">
+                    <Title Level="5">Q: Bearer Token多久过期？</Title>
+                    <Paragraph>A: Bearer Token默认不会过期，但可以手动刷新生成新的Token</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 为什么API请求失败？</Title>
+                    <Paragraph>A: 请检查目标地址、API密钥是否正确，以及网络连接是否正常</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 如何测试代理配置？</Title>
+                    <Paragraph>A: 可以使用生成的Bearer Token发送测试请求，查看请求日志验证配置</Paragraph>
+                </div>
+            </div>
+        </Panel>
+        
+        <Panel Key="2" Header="日志查看相关问题">
+            <div class="faq-content">
+                <div class="faq-item">
+                    <Title Level="5">Q: 为什么看不到请求体内容？</Title>
+                    <Paragraph>A: 需要在代理配置中启用"记录请求体"选项</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 日志数据会保存多久？</Title>
+                    <Paragraph>A: 系统会保存所有日志数据，建议定期清理过期日志</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 如何快速找到特定的请求？</Title>
+                    <Paragraph>A: 使用时间范围、状态码、代理配置等筛选条件缩小查找范围</Paragraph>
+                </div>
+            </div>
+        </Panel>
+        
+        <Panel Key="3" Header="数据集相关问题">
+            <div class="faq-content">
+                <div class="faq-item">
+                    <Title Level="5">Q: 支持哪些导入格式？</Title>
+                    <Paragraph>A: 支持Excel(.xlsx)、CSV(.csv)、JSON(.json)格式的数据导入</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 如何批量修改数据项？</Title>
+                    <Paragraph>A: 可以导出为Excel格式，修改后重新导入覆盖原数据</Paragraph>
+                </div>
+                <div class="faq-item">
+                    <Title Level="5">Q: 数据集删除后能恢复吗？</Title>
+                    <Paragraph>A: 删除是永久性的，建议在删除前先导出备份</Paragraph>
+                </div>
+            </div>
+        </Panel>
+    </Collapse>
+</Modal>
+
+@code {
+    private bool helpModalVisible = false;
+    private string activeTabKey = "1";
+    private string selectedDatasetTab = "create";
+
+    private void ShowHelpModal()
+    {
+        helpModalVisible = true;
+    }
+
+    private void OnDatasetTabChange(string tab)
+    {
+        selectedDatasetTab = tab;
+    }
+
+    public void Dispose()
+    {
+        // 确保组件正确销毁
+    }
+}
+
+<style>
+    .page-container {
+        padding: 24px;
+        background: #f0f2f5;
+        min-height: calc(100vh - 64px);
+    }
+
+    .tab-content {
+        padding: 24px;
+    }
+
+    .section-header {
+        margin-bottom: 32px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .guide-steps {
+        max-width: 1000px;
+    }
+
+    .step-item {
+        display: flex;
+        margin-bottom: 32px;
+        padding: 24px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
+    }
+
+    .step-item:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .step-number {
+        min-width: 40px;
+        height: 40px;
+        background: #7F7FFF;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        margin-right: 24px;
+        flex-shrink: 0;
+    }
+
+    .step-content {
+        flex: 1;
+    }
+
+    .info-card, .filter-card, .method-card {
+        height: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .info-card:hover, .filter-card:hover, .method-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .api-card {
+        padding: 16px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .api-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .api-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .code-card {
+        margin-top: 16px;
+    }
+
+    .code-block {
+        background: #f6f8fa;
+        border-radius: 6px;
+        overflow-x: auto;
+    }
+
+    .code-block pre {
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        margin: 0;
+        padding: 16px;
+        color: #24292e;
+    }
+
+    .export-card {
+        padding: 16px;
+        text-align: center;
+    }
+
+    .export-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .dataset-guide {
+        max-width: 800px;
+    }
+
+    .guide-card {
+        margin-bottom: 24px;
+    }
+
+    .edit-list {
+        list-style-type: disc;
+        padding-left: 20px;
+        margin: 0;
+    }
+
+    .edit-list li {
+        margin-bottom: 8px;
+        color: rgba(0, 0, 0, 0.65);
+    }
+
+    .export-option {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 16px;
+        text-align: center;
+    }
+
+    .quality-tips {
+        list-style-type: disc;
+        padding-left: 20px;
+        margin: 8px 0 0 0;
+    }
+
+    .quality-tips li {
+        margin-bottom: 8px;
+    }
+
+    .faq-content {
+        padding: 16px;
+    }
+
+    .faq-item {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .faq-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .ant-card {
+        margin-bottom: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
+    }
+
+    .ant-alert {
+        border-radius: 6px;
+        margin-bottom: 16px;
+    }
+
+    .ant-descriptions-item-label {
+        font-weight: 600;
+        background: #fafafa;
+    }
+
+    /* 数据集Tag选项卡样式 */
+    .dataset-tabs-container {
+        width: 100%;
+    }
+
+    .dataset-tag-tabs {
+        margin-bottom: 24px;
+        padding: 16px;
+        background: #fafafa;
+        border-radius: 8px;
+        border: 1px solid #e8e8e8;
+    }
+
+    .dataset-tab-content {
+        min-height: 300px;
+        background: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        border: 1px solid #e8e8e8;
+    }
+
+    /* 响应式设计 */
+    @@media (max-width: 768px) {
+        .step-item {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .step-number {
+            margin-right: 0;
+            margin-bottom: 16px;
+        }
+
+        .tab-content {
+            padding: 16px;
+        }
+
+        .dataset-tag-tabs {
+            text-align: center;
+        }
+
+        .dataset-tab-content {
+            padding: 16px;
+        }
+    }
+</style>

@@ -1,0 +1,1321 @@
+@page "/dataset-detail/{DatasetId:guid}"
+@using MME.Domain.Repositories.Dataset
+@using MME.Domain.Repositories
+@using MME.Domain.Services
+@using MME.Domain.Model
+@using AntDesign
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using System.Text.Json
+@using NPOI.XSSF.UserModel
+@using NPOI.SS.UserModel
+@using NPOI.HSSF.Util
+@using SqlSugar
+@attribute [Authorize]
+@implements IDisposable
+@inject IDatasetService DatasetService
+@inject IMessageService MessageService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@inject MME.Domain.Repositories.IApiRequestLogRepository LogRepository
+
+<PageTitle>@(dataset?.Name ?? "数据集详情")</PageTitle>
+
+@if (dataset == null && !loading)
+{
+    <Result Status="@ResultStatus.Error" Title="数据集不存在" SubTitle="请检查URL是否正确">
+        <Extra>
+            <Button Type="@ButtonType.Primary" OnClick="@(() => Navigation.NavigateTo("/dataset-management"))">
+                返回数据集管理
+            </Button>
+        </Extra>
+    </Result>
+}
+else
+{
+    <div class="dataset-detail-container">
+        <PageHeader Title="@(dataset?.Name ?? "加载中...")" 
+                   SubTitle="@(dataset?.Description ?? "")" 
+                   OnBack="@(() => Navigation.NavigateTo("/dataset-management"))"
+                   Class="dataset-header">
+            <PageHeaderExtra>
+                <Space>
+                    <SpaceItem>
+                        <Dropdown>
+                            <Overlay>
+                                <Menu>
+                                    <MenuItem OnClick="ExportToExcel" Disabled="@exportLoading">
+                                        <Icon Type="file-excel" /> 导出Excel
+                                    </MenuItem>
+                                    <MenuItem OnClick="ExportToLog" Disabled="@exportLoading">
+                                        <Icon Type="file-text" /> 导出Log文件
+                                    </MenuItem>
+                                </Menu>
+                            </Overlay>
+                            <ChildContent>
+                                <Button Type="@ButtonType.Default" Icon="download" Loading="@exportLoading">
+                                    导出数据集 <Icon Type="down" />
+                                </Button>
+                            </ChildContent>
+                        </Dropdown>
+                    </SpaceItem>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Primary" Icon="reload" OnClick="RefreshData" Loading="@loading">
+                            刷新
+                        </Button>
+                    </SpaceItem>
+                </Space>
+            </PageHeaderExtra>
+        </PageHeader>
+
+        @if (dataset != null)
+        {
+            <!-- 统计信息卡片 -->
+            <div style="margin-bottom: 16px;">
+                <Row Gutter="16">
+                    <AntDesign.Col Span="6">
+                        <Card Bordered="false" Size="@CardSize.Small">
+                            <Statistic Title="总数据项" Value="@statistics.TotalItems" />
+                        </Card>
+                    </AntDesign.Col>
+                    <AntDesign.Col Span="6">
+                        <Card Bordered="false" Size="@CardSize.Small">
+                            <Statistic Title="有期望输出" Value="@statistics.ItemsWithExpectedOutput" />
+                        </Card>
+                    </AntDesign.Col>
+                    <AntDesign.Col Span="6">
+                        <Card Bordered="false" Size="@CardSize.Small">
+                            <Statistic Title="来自请求日志" Value="@statistics.ItemsFromRequestLog" />
+                        </Card>
+                    </AntDesign.Col>
+                    <AntDesign.Col Span="6">
+                        <Card Bordered="false" Size="@CardSize.Small">
+                            <Statistic Title="手动添加" Value="@statistics.ItemsManualAdded" />
+                        </Card>
+                    </AntDesign.Col>
+                </Row>
+            </div>
+
+            <!-- 筛选和数据项表格 -->
+            <Card Class="items-card" Bordered="false">
+                <!-- 筛选区域 -->
+                <div style="margin-bottom: 16px;">
+                    <Space>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedSourceType" TItemValue="string" TItem="string" Placeholder="来源类型" Style="width: 120px" AllowClear>
+                                <SelectOptions>
+                                    <SelectOption TItemValue="string" TItem="string" Label="请求日志" Value="@("RequestLog")" />
+                                    <SelectOption TItemValue="string" TItem="string" Label="手动添加" Value="@("Manual")" />
+                                    <SelectOption TItemValue="string" TItem="string" Label="导入" Value="@("Import")" />
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Select @bind-Value="selectedDifficulty" TItemValue="int?" TItem="int" Placeholder="难度" Style="width: 120px" AllowClear>
+                                <SelectOptions>
+                                    <SelectOption TItemValue="int?" TItem="int" Label="1 - 很简单" Value="1" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="2 - 简单" Value="2" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="3 - 中等" Value="3" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="4 - 困难" Value="4" />
+                                    <SelectOption TItemValue="int?" TItem="int" Label="5 - 很困难" Value="5" />
+                                </SelectOptions>
+                            </Select>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Input @bind-Value="searchText" 
+                                   @oninput="@((ChangeEventArgs e) => { searchText = e.Value?.ToString() ?? ""; OnSearchTextChanged(); })"
+                                   Placeholder="搜索内容" 
+                                   Style="width: 200px;" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Type="@ButtonType.Primary" Icon="search" OnClick="SearchItems">
+                                搜索
+                            </Button>
+                        </SpaceItem>
+                        <SpaceItem>
+                            <Button Icon="clear" OnClick="ClearItemFilters">
+                                清空筛选
+                            </Button>
+                        </SpaceItem>
+                    </Space>
+                </div>
+
+                <!-- 数据项表格 -->
+                <Table DataSource="@items" TItem="DatasetItemDto" Loading="@loading" 
+                       Bordered Size="@TableSize.Small" ScrollX="1500px" 
+                       HidePagination="true" Class="items-table">
+                    <AntDesign.Column Title="输入内容" DataIndex="Input" TData="string" Width="280">
+                        <div class="text-cell">
+                            <Tooltip Title="@context.Input">
+                                <Text class="text-content">@GetDisplayText(context.Input)</Text>
+                            </Tooltip>
+                        </div>
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="期望输出" DataIndex="ExpectedOutput" TData="string" Width="280">
+                        <div class="text-cell">
+                            @if (!string.IsNullOrEmpty(context.ExpectedOutput))
+                            {
+                                <Tooltip Title="@context.ExpectedOutput">
+                                    <Text class="text-content">@GetDisplayText(context.ExpectedOutput)</Text>
+                                </Tooltip>
+                            }
+                            else
+                            {
+                                <span style="color: #8c8c8c;">无</span>
+                            }
+                        </div>
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="来源" DataIndex="SourceType" TData="string" Width="100">
+                        <Tag Color="@GetSourceTypeColor(context.SourceType)">@context.SourceTypeText</Tag>
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="模型" DataIndex="ModelName" TData="string" Width="120">
+                        @if (!string.IsNullOrEmpty(context.ModelName))
+                        {
+                            <Tag Color="@TagColor.Blue">@context.ModelName</Tag>
+                        }
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="代理" DataIndex="ProxyName" TData="string" Width="120">
+                        @if (!string.IsNullOrEmpty(context.ProxyName))
+                        {
+                            <Tag Color="@TagColor.Green">@context.ProxyName</Tag>
+                        }
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="难度" DataIndex="Difficulty" TData="int?" Width="80">
+                        @if (context.Difficulty.HasValue)
+                        {
+                            <Tag Color="@GetDifficultyColor(context.Difficulty.Value)">@context.Difficulty</Tag>
+                        }
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="质量" DataIndex="Quality" TData="int?" Width="80">
+                        @if (context.Quality.HasValue)
+                        {
+                            <Tag Color="@GetQualityColor(context.Quality.Value)">@context.Quality</Tag>
+                        }
+                    </AntDesign.Column>
+                    <AntDesign.Column Title="创建时间" DataIndex="CreateTime" TData="DateTime" Width="150">
+                        <Tooltip Title="@context.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")">
+                            @context.CreateTime.ToString("MM-dd HH:mm")
+                        </Tooltip>
+                    </AntDesign.Column>
+                    <ActionColumn Title="操作" Width="240">
+                        <Space>
+                            @if (context.SourceType == "RequestLog")
+                            {
+                                <SpaceItem>
+                                    <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                            OnClick="() => ShowOriginalRequestLog(context)">
+                                        查看原始日志
+                                    </Button>
+                                </SpaceItem>
+                            }
+                            <SpaceItem>
+                                <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                        OnClick="() => ShowEditItemModal(context)">
+                                    编辑
+                                </Button>
+                            </SpaceItem>
+                            <SpaceItem>
+                                <Popconfirm Title="确定要删除这个数据项吗？" 
+                                           OnConfirm="() => DeleteItem(context.Id)"
+                                           OkText="确定" CancelText="取消">
+                                    <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" Danger>
+                                        删除
+                                    </Button>
+                                </Popconfirm>
+                            </SpaceItem>
+                        </Space>
+                    </ActionColumn>
+                </Table>
+
+                <!-- 分页 -->
+                <div style="margin-top: 16px; text-align: right;">
+                    <Pagination Current="@currentPage" 
+                               Total="@totalCount" 
+                               PageSize="@pageSize" 
+                               OnChange="OnPageChange" />
+                </div>
+            </Card>
+        }
+    </div>
+
+    <!-- 编辑数据项模态框 -->
+    <Modal Title="编辑数据项" 
+           Visible="@itemModalVisible" 
+           Width="800"
+           OnCancel="() => itemModalVisible = false"
+           OnOk="SaveItem"
+           ConfirmLoading="@saveItemLoading">
+        <Form Model="@currentItemForm" Layout="@FormLayout.Vertical">
+            <FormItem Label="输入内容" Required>
+                <TextArea @bind-Value="currentItemForm.Input" Placeholder="请输入内容" Rows="4" />
+            </FormItem>
+
+            <FormItem Label="期望输出">
+                <TextArea @bind-Value="currentItemForm.ExpectedOutput" Placeholder="请输入期望输出" Rows="4" />
+            </FormItem>
+
+            <FormItem Label="标签">
+                <Input @bind-Value="@itemTagsInput" Placeholder="输入标签，用逗号分隔" OnPressEnter="AddItemTag" />
+                @if (currentItemForm.Tags.Any())
+                {
+                    <div style="margin-top: 8px;">
+                        @foreach (var tag in currentItemForm.Tags)
+                        {
+                            <Tag Closable OnClose="() => RemoveItemTag(tag)" Style="margin-bottom: 4px;">
+                                @tag
+                            </Tag>
+                        }
+                    </div>
+                }
+            </FormItem>
+
+            <FormItem Label="备注">
+                <TextArea @bind-Value="currentItemForm.Remarks" Placeholder="添加备注信息" Rows="2" />
+            </FormItem>
+
+            <div style="display: flex; gap: 16px;">
+                <FormItem Label="难度等级" Style="flex: 1;">
+                    <Select @bind-Value="currentItemForm.Difficulty" TItemValue="int?" TItem="int" Placeholder="选择难度" AllowClear>
+                        <SelectOptions>
+                            <SelectOption TItemValue="int?" TItem="int" Label="1 - 很简单" Value="1" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="2 - 简单" Value="2" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="3 - 中等" Value="3" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="4 - 困难" Value="4" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="5 - 很困难" Value="5" />
+                        </SelectOptions>
+                    </Select>
+                </FormItem>
+
+                <FormItem Label="质量评分" Style="flex: 1;">
+                    <Select @bind-Value="currentItemForm.Quality" TItemValue="int?" TItem="int" Placeholder="选择质量" AllowClear>
+                        <SelectOptions>
+                            <SelectOption TItemValue="int?" TItem="int" Label="1 - 很差" Value="1" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="2 - 差" Value="2" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="3 - 一般" Value="3" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="4 - 好" Value="4" />
+                            <SelectOption TItemValue="int?" TItem="int" Label="5 - 很好" Value="5" />
+                        </SelectOptions>
+                    </Select>
+                </FormItem>
+            </div>
+        </Form>
+    </Modal>
+
+    <!-- 使用封装的请求日志详情组件 -->
+    <RequestLogDetailModal Visible="@requestLogDetailModalVisible" 
+                          LogData="@originalRequestLog" 
+                          OnCancel="@(() => requestLogDetailModalVisible = false)" />
+}
+
+@code {
+    [Parameter] public Guid DatasetId { get; set; }
+
+    private DatasetDto? dataset = null;
+    private DatasetStatisticsDto statistics = new();
+    private List<DatasetItemDto> items = new();
+    private bool loading = false;
+    private bool exportLoading = false;
+    private bool saveItemLoading = false;
+
+    // 筛选条件
+    private string? selectedSourceType = null;
+    private int? selectedDifficulty = null;
+    private string searchText = "";
+
+    // 分页
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private int totalCount = 0;
+
+    // 添加/编辑数据项
+    private bool itemModalVisible = false;
+    private DatasetItemDto? editingItem = null;
+    private CreateDatasetItemRequest currentItemForm = new();
+    private string itemTagsInput = "";
+
+    // 原始请求日志详情
+    private bool requestLogDetailModalVisible = false;
+    private ApiRequestLogDto? originalRequestLog = null;
+
+    // 性能优化：缓存处理结果
+    private readonly Dictionary<string, string> _displayTextCache = new();
+    private readonly Dictionary<string, string> _processedResponseCache = new();
+    
+    // 搜索防抖
+    private Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 并行加载数据以提升性能
+        var loadTasks = new List<Task>
+        {
+            LoadDataset(),
+            LoadStatistics(),
+            LoadItems()
+        };
+        
+        await Task.WhenAll(loadTasks);
+    }
+
+    private async Task LoadDataset()
+    {
+        try
+        {
+            dataset = await DatasetService.GetDatasetByIdAsync(DatasetId);
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"加载数据集信息失败：{ex.Message}");
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            statistics = await DatasetService.GetDatasetStatisticsAsync(DatasetId);
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"加载统计信息失败：{ex.Message}");
+        }
+    }
+
+    private async Task LoadItems()
+    {
+        if (loading) return; // 防止重复加载
+        
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var queryParams = new DatasetItemQueryParams
+            {
+                DatasetId = DatasetId,
+                SourceType = selectedSourceType,
+                Difficulty = selectedDifficulty,
+                SearchText = string.IsNullOrWhiteSpace(searchText) ? null : searchText,
+                Page = currentPage,
+                PageSize = pageSize,
+                SortField = "CreateTime",
+                SortDescending = true
+            };
+
+            var result = await DatasetService.GetDatasetItemsAsync(queryParams);
+            items = result.List;
+            totalCount = result.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"加载数据项失败：{ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        // 并行刷新数据以提升性能
+        var refreshTasks = new List<Task>
+        {
+            LoadDataset(),
+            LoadStatistics(),
+            LoadItems()
+        };
+        
+                    await Task.WhenAll(refreshTasks);
+        }
+
+        /// <summary>
+        /// 清理缓存以释放内存
+        /// </summary>
+        private void ClearCaches()
+        {
+            _displayTextCache.Clear();
+            _processedResponseCache.Clear();
+        }
+    
+                private async Task SearchItems()
+        {
+            currentPage = 1;
+            await LoadItems();
+        }
+
+        /// <summary>
+        /// 带防抖的搜索方法
+        /// </summary>
+        private void OnSearchTextChanged()
+        {
+            _searchTimer?.Dispose();
+            _searchTimer = new Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    currentPage = 1;
+                    await LoadItems();
+                });
+            }, null, 500, Timeout.Infinite); // 500ms防抖延迟
+        }
+
+    private async Task ClearItemFilters()
+    {
+        selectedSourceType = null;
+        selectedDifficulty = null;
+        searchText = "";
+        currentPage = 1;
+        await LoadItems();
+    }
+
+    private async Task OnPageChange(PaginationEventArgs args)
+    {
+        currentPage = args.Page;
+        await LoadItems();
+    }
+
+
+
+    private void ShowEditItemModal(DatasetItemDto item)
+    {
+        editingItem = item;
+        currentItemForm = new CreateDatasetItemRequest
+        {
+            DatasetId = DatasetId,
+            Input = item.Input,
+            ExpectedOutput = item.ExpectedOutput,
+            Tags = item.Tags.ToList(),
+            Remarks = item.Remarks,
+            Difficulty = item.Difficulty,
+            Quality = item.Quality
+        };
+        itemTagsInput = "";
+        itemModalVisible = true;
+    }
+
+    private async Task SaveItem()
+    {
+        if (string.IsNullOrWhiteSpace(currentItemForm.Input))
+        {
+            _ = MessageService.Warning("请输入内容");
+            return;
+        }
+
+        if (editingItem == null)
+        {
+            _ = MessageService.Warning("未选择要编辑的数据项");
+            return;
+        }
+
+        saveItemLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 更新数据项
+            var updateRequest = new UpdateDatasetItemRequest
+            {
+                Id = editingItem.Id,
+                Input = currentItemForm.Input,
+                ExpectedOutput = currentItemForm.ExpectedOutput,
+                Tags = currentItemForm.Tags,
+                Remarks = currentItemForm.Remarks,
+                Difficulty = currentItemForm.Difficulty,
+                Quality = currentItemForm.Quality
+            };
+            await DatasetService.UpdateDatasetItemAsync(updateRequest);
+            _ = MessageService.Success("更新成功");
+
+            itemModalVisible = false;
+            ClearCaches(); // 清理缓存
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"保存失败：{ex.Message}");
+        }
+        finally
+        {
+            saveItemLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteItem(Guid itemId)
+    {
+        try
+        {
+            await DatasetService.DeleteDatasetItemAsync(itemId);
+            _ = MessageService.Success("删除成功");
+            ClearCaches(); // 清理缓存
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"删除失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 显示原始请求日志详情
+    /// </summary>
+    private async Task ShowOriginalRequestLog(DatasetItemDto item)
+    {
+        if (item.SourceType != "RequestLog" || string.IsNullOrEmpty(item.SourceId))
+        {
+            _ = MessageService.Warning("该数据项不是来自请求日志或缺少来源ID");
+            return;
+        }
+
+        try
+        {
+            // 根据来源ID查询原始请求日志
+            var logs = await LogRepository.GetLogsWithProxyInfoAsync(
+                log => log.RequestId == item.SourceId,
+                new SqlSugar.PageModel { PageIndex = 1, PageSize = 1 },
+                null,
+                null,
+                SqlSugar.OrderByType.Desc);
+
+            if (logs.List.Any())
+            {
+                originalRequestLog = logs.List.First();
+                requestLogDetailModalVisible = true;
+            }
+            else
+            {
+                _ = MessageService.Warning("未找到对应的原始请求日志");
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"查询原始请求日志失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 导出Excel
+    /// </summary>
+    private async Task ExportToExcel()
+    {
+        if (dataset == null) return;
+
+        exportLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 获取要导出的数据（所有符合当前筛选条件的数据）
+            var exportData = await GetExportData();
+
+            if (!exportData.Any())
+            {
+                _ = MessageService.Warning("没有数据可以导出");
+                return;
+            }
+
+            // 转换为Excel导出格式
+            var exportList = ConvertToExportDto(exportData);
+
+            // 使用自定义的Excel生成方法来更好地处理长文本
+            var excelBytes = GenerateDetailedExcel(exportList);
+
+            // 生成文件名
+            var fileName = $"{dataset.Name}_数据集_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+
+            // 下载文件
+            await DownloadFile(fileName, excelBytes);
+
+            _ = MessageService.Success($"导出成功！共导出 {exportList.Count} 条记录");
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"导出失败：{ex.Message}");
+        }
+        finally
+        {
+            exportLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 导出Log文件
+    /// </summary>
+    private async Task ExportToLog()
+    {
+        if (dataset == null) return;
+
+        exportLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 获取要导出的数据（所有符合当前筛选条件的数据）
+            var exportData = await GetExportData();
+
+            if (!exportData.Any())
+            {
+                _ = MessageService.Warning("没有数据可以导出");
+                return;
+            }
+
+            // 转换为Log文件格式（不截断长文本）
+            var exportList = ConvertToLogDto(exportData);
+
+            // 生成Log文件内容
+            var logContent = GenerateLogContent(exportList);
+            var logBytes = System.Text.Encoding.UTF8.GetBytes(logContent);
+
+            // 生成文件名
+            var fileName = $"{dataset.Name}_数据集_{DateTime.Now:yyyyMMdd_HHmmss}.log";
+
+            // 下载文件
+            await DownloadFile(fileName, logBytes);
+
+            _ = MessageService.Success($"导出成功！共导出 {exportList.Count} 条记录");
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"导出失败：{ex.Message}");
+        }
+        finally
+        {
+            exportLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadFile(string fileName, byte[] fileBytes)
+    {
+        var base64 = Convert.ToBase64String(fileBytes);
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+    }
+
+    private void AddItemTag()
+    {
+        if (!string.IsNullOrWhiteSpace(itemTagsInput))
+        {
+            var tags = itemTagsInput.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .Where(t => !string.IsNullOrEmpty(t) && !currentItemForm.Tags.Contains(t));
+
+            currentItemForm.Tags.AddRange(tags);
+            itemTagsInput = "";
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveItemTag(string tag)
+    {
+        currentItemForm.Tags.Remove(tag);
+        StateHasChanged();
+    }
+
+    private string GetSourceTypeColor(string sourceType)
+    {
+        return sourceType switch
+        {
+            "RequestLog" => "blue",
+            "Manual" => "green",
+            "Import" => "orange",
+            _ => "default"
+        };
+    }
+
+    private string GetDifficultyColor(int difficulty)
+    {
+        return difficulty switch
+        {
+            1 => "green",
+            2 => "blue",
+            3 => "orange",
+            4 => "red",
+            5 => "volcano",
+            _ => "default"
+        };
+    }
+
+    private string GetQualityColor(int quality)
+    {
+        return quality switch
+        {
+            1 => "red",
+            2 => "orange",
+            3 => "blue",
+            4 => "green",
+            5 => "success",
+            _ => "default"
+        };
+    }
+
+    /// <summary>
+    /// 获取导出数据（所有符合当前筛选条件的数据）
+    /// </summary>
+    private async Task<List<DatasetItemDto>> GetExportData()
+    {
+        var queryParams = new DatasetItemQueryParams
+        {
+            DatasetId = DatasetId,
+            SourceType = selectedSourceType,
+            Difficulty = selectedDifficulty,
+            SearchText = string.IsNullOrWhiteSpace(searchText) ? null : searchText,
+            Page = 1,
+            PageSize = 10000, // 设置一个大的页面大小以获取所有数据
+            SortField = "CreateTime",
+            SortDescending = true
+        };
+
+        var result = await DatasetService.GetDatasetItemsAsync(queryParams);
+        return result.List;
+    }
+
+    /// <summary>
+    /// 转换为Excel导出DTO
+    /// </summary>
+    private List<DatasetItemExportDto> ConvertToExportDto(List<DatasetItemDto> items)
+    {
+        return items.Select(item => new DatasetItemExportDto
+        {
+            Id = item.Id.ToString(),
+            Input = TruncateIfTooLong(item.Input),
+            ExpectedOutput = TruncateIfTooLong(GetProcessedDatasetItemResponse(item)),
+            SourceType = item.SourceTypeText,
+            ModelName = item.ModelName ?? "",
+            ProxyName = item.ProxyName ?? "",
+            Difficulty = item.Difficulty?.ToString() ?? "",
+            Quality = item.Quality?.ToString() ?? "",
+            Tags = string.Join(", ", item.Tags),
+            Remarks = TruncateIfTooLong(item.Remarks ?? ""),
+            CreateTime = item.CreateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            UpdateTime = item.UpdateTime.ToString("yyyy-MM-dd HH:mm:ss")
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 转换为Log文件导出DTO（不截断长文本）
+    /// </summary>
+    private List<DatasetItemExportDto> ConvertToLogDto(List<DatasetItemDto> items)
+    {
+        return items.Select(item => new DatasetItemExportDto
+        {
+            Id = item.Id.ToString(),
+            Input = item.Input,
+            ExpectedOutput = GetProcessedDatasetItemResponse(item),
+            SourceType = item.SourceTypeText,
+            ModelName = item.ModelName ?? "",
+            ProxyName = item.ProxyName ?? "",
+            Difficulty = item.Difficulty?.ToString() ?? "",
+            Quality = item.Quality?.ToString() ?? "",
+            Tags = string.Join(", ", item.Tags),
+            Remarks = item.Remarks ?? "",
+            CreateTime = item.CreateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            UpdateTime = item.UpdateTime.ToString("yyyy-MM-dd HH:mm:ss")
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 生成Excel文件
+    /// </summary>
+    private byte[] GenerateDetailedExcel(List<DatasetItemExportDto> data)
+    {
+        var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook();
+        var sheet = workbook.CreateSheet("数据集详情");
+        
+        // 创建样式
+        var headerStyle = workbook.CreateCellStyle();
+        var headerFont = workbook.CreateFont();
+        headerFont.IsBold = true;
+        headerFont.FontHeightInPoints = 12;
+        headerStyle.SetFont(headerFont);
+        headerStyle.FillForegroundColor = NPOI.HSSF.Util.HSSFColor.Grey25Percent.Index;
+        headerStyle.FillPattern = NPOI.SS.UserModel.FillPattern.SolidForeground;
+        headerStyle.BorderBottom = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderTop = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderLeft = NPOI.SS.UserModel.BorderStyle.Thin;
+        headerStyle.BorderRight = NPOI.SS.UserModel.BorderStyle.Thin;
+        
+        var cellStyle = workbook.CreateCellStyle();
+        cellStyle.WrapText = true; // 启用文本换行
+        cellStyle.VerticalAlignment = NPOI.SS.UserModel.VerticalAlignment.Top;
+        cellStyle.BorderBottom = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderTop = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderLeft = NPOI.SS.UserModel.BorderStyle.Thin;
+        cellStyle.BorderRight = NPOI.SS.UserModel.BorderStyle.Thin;
+
+        // 列定义
+        var columns = new[]
+        {
+            new { Name = "数据项ID", Width = 8000, Property = "Id" },
+            new { Name = "输入内容", Width = 30000, Property = "Input" },
+            new { Name = "期望输出", Width = 30000, Property = "ExpectedOutput" },
+            new { Name = "来源类型", Width = 3000, Property = "SourceType" },
+            new { Name = "模型名称", Width = 4000, Property = "ModelName" },
+            new { Name = "代理名称", Width = 4000, Property = "ProxyName" },
+            new { Name = "难度", Width = 2000, Property = "Difficulty" },
+            new { Name = "质量", Width = 2000, Property = "Quality" },
+            new { Name = "标签", Width = 6000, Property = "Tags" },
+            new { Name = "备注", Width = 8000, Property = "Remarks" },
+            new { Name = "创建时间", Width = 4000, Property = "CreateTime" },
+            new { Name = "更新时间", Width = 4000, Property = "UpdateTime" }
+        };
+
+        // 设置列宽
+        for (int i = 0; i < columns.Length; i++)
+        {
+            sheet.SetColumnWidth(i, columns[i].Width);
+        }
+
+        // 创建表头
+        var headerRow = sheet.CreateRow(0);
+        headerRow.Height = 600;
+        
+        for (int i = 0; i < columns.Length; i++)
+        {
+            var cell = headerRow.CreateCell(i);
+            cell.SetCellValue(columns[i].Name);
+            cell.CellStyle = headerStyle;
+        }
+
+        // 填充数据
+        for (int i = 0; i < data.Count; i++)
+        {
+            var row = sheet.CreateRow(i + 1);
+            var item = data[i];
+            
+            for (int j = 0; j < columns.Length; j++)
+            {
+                var cell = row.CreateCell(j);
+                cell.CellStyle = cellStyle;
+                
+                var value = GetPropertyValue(item, columns[j].Property)?.ToString() ?? "";
+                cell.SetCellValue(value);
+            }
+            
+            // 为包含长文本的行设置较大的行高
+            row.Height = 2000;
+        }
+
+        // 冻结表头
+        sheet.CreateFreezePane(0, 1);
+
+        // 生成字节数组
+        using var memoryStream = new MemoryStream();
+        workbook.Write(memoryStream);
+        return memoryStream.ToArray();
+    }
+
+    /// <summary>
+    /// 生成Log文件内容（每行一个JSON对象）
+    /// </summary>
+    private string GenerateLogContent(List<DatasetItemExportDto> exportList)
+    {
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = false, // 不使用缩进，保持每行一个JSON对象
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        var logLines = exportList.Select(item => 
+        {
+            // 创建JSON对象
+            var logObject = new
+            {
+                id = item.Id,
+                input = DecodeUnicodeString(item.Input),
+                expectedOutput = DecodeUnicodeString(item.ExpectedOutput),
+                sourceType = item.SourceType,
+                modelName = item.ModelName,
+                proxyName = item.ProxyName,
+                difficulty = item.Difficulty,
+                quality = item.Quality,
+                tags = item.Tags,
+                remarks = DecodeUnicodeString(item.Remarks),
+                createTime = item.CreateTime,
+                updateTime = item.UpdateTime
+            };
+            
+            return JsonSerializer.Serialize(logObject, jsonOptions);
+        });
+
+        return string.Join(Environment.NewLine, logLines);
+    }
+
+    /// <summary>
+    /// 解码Unicode转义字符串
+    /// </summary>
+    private string DecodeUnicodeString(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        try
+        {
+            // 使用System.Text.RegularExpressions.Regex来解码Unicode转义字符
+            return System.Text.RegularExpressions.Regex.Unescape(input);
+        }
+        catch (Exception)
+        {
+            // 如果解码失败，返回原字符串
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// 截断过长的文本以符合Excel限制
+    /// </summary>
+    private string TruncateIfTooLong(string text)
+    {
+        const int maxLength = 32000; // 留一些余量，避免超过32767的限制
+        
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        {
+            return text;
+        }
+        
+        // 截断文本并添加提示
+        var truncated = text.Substring(0, maxLength - 100);
+        return truncated + "\n\n[注意：内容过长已截断，完整内容请查看Log文件导出]";
+    }
+
+    /// <summary>
+    /// 反射获取属性值
+    /// </summary>
+    private object? GetPropertyValue(object obj, string propertyName)
+    {
+        return obj.GetType().GetProperty(propertyName)?.GetValue(obj);
+    }
+
+    /// <summary>
+    /// 格式化JSON或纯文本
+    /// </summary>
+    private string FormatJsonOrPlainText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return "";
+
+        // 先解码Unicode转义字符
+        var decodedText = DecodeUnicodeString(text);
+
+        try
+        {
+            // 尝试解析为JSON
+            using var doc = System.Text.Json.JsonDocument.Parse(decodedText);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch
+        {
+            // 如果不是JSON，返回解码后的文本
+            return decodedText;
+        }
+    }
+
+    /// <summary>
+    /// 获取显示用的文本（截断长文本并去除换行符）- 带缓存优化
+    /// </summary>
+    private string GetDisplayText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return "";
+
+        // 检查缓存
+        if (_displayTextCache.TryGetValue(text, out var cachedResult))
+            return cachedResult;
+
+        // 先解码Unicode转义字符
+        var decodedText = DecodeUnicodeString(text);
+        
+        // 去除换行符，用空格替换
+        var singleLineText = decodedText.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        
+        // 如果文本太长，进行截断
+        const int maxLength = 100;
+        var result = singleLineText.Length > maxLength 
+            ? singleLineText.Substring(0, maxLength) + "..."
+            : singleLineText;
+        
+        // 缓存结果（限制缓存大小）
+        if (_displayTextCache.Count < 1000)
+        {
+            _displayTextCache[text] = result;
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// 检测是否为流式请求
+    /// </summary>
+    private bool? ParseStreamParameter(string? requestBody)
+    {
+        if (string.IsNullOrEmpty(requestBody))
+            return null;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(requestBody);
+            var root = doc.RootElement;
+            
+            if (root.TryGetProperty("stream", out var stream))
+            {
+                return stream.GetBoolean();
+            }
+        }
+        catch
+        {
+            // 忽略解析错误
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 解析流式响应并合并内容
+    /// </summary>
+    private string ParseAndMergeStreamResponse(string? responseBody)
+    {
+        if (string.IsNullOrEmpty(responseBody))
+            return "";
+
+        try
+        {
+            var lines = responseBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var contentBuilder = new System.Text.StringBuilder();
+            var reasoningContentBuilder = new System.Text.StringBuilder();
+            string? chatId = null;
+            string? modelName = null;
+            int lineIndex = 0;
+            
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("data: [DONE]"))
+                    continue;
+                    
+                lineIndex++;
+                
+                // 移除 "data: " 前缀
+                if (trimmedLine.StartsWith("data: "))
+                {
+                    trimmedLine = trimmedLine.Substring(6);
+                }
+                
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(trimmedLine);
+                    var root = doc.RootElement;
+                    
+                    // 从第二条消息开始解析id和model（第一条通常为空）
+                    if (lineIndex >= 2)
+                    {
+                        if (chatId == null && root.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
+                        {
+                            chatId = idElement.GetString();
+                        }
+                        
+                        if (modelName == null && root.TryGetProperty("model", out var modelElement) && modelElement.ValueKind == JsonValueKind.String)
+                        {
+                            modelName = modelElement.GetString();
+                        }
+                    }
+                    
+                    // 检查是否有choices数组
+                    if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var choice in choices.EnumerateArray())
+                        {
+                            // 流式响应只提取 delta 中的内容，避免重复
+                            if (choice.TryGetProperty("delta", out var delta))
+                            {
+                                if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+                                {
+                                    contentBuilder.Append(content.GetString());
+                                }
+                                
+                                if (delta.TryGetProperty("reasoning_content", out var reasoningContent) && reasoningContent.ValueKind == JsonValueKind.String)
+                                {
+                                    reasoningContentBuilder.Append(reasoningContent.GetString());
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // 忽略无法解析的行
+                    continue;
+                }
+            }
+            
+            // 构建标准的ChatCompletion响应格式，包含合并后的内容
+            var mergedResponse = new
+            {
+                id = chatId ?? "merged-response",
+                model = modelName ?? "merged-stream",
+                @object = "chat.completion",
+                choices = new[]
+                {
+                    new
+                    {
+                        index = 0,
+                        message = new
+                        {
+                            role = "assistant",
+                            content = contentBuilder.ToString(),
+                            reasoning_content = reasoningContentBuilder.ToString()
+                        },
+                        finish_reason = "stop"
+                    }
+                },
+                usage = new
+                {
+                    content_length = contentBuilder.Length,
+                    reasoning_content_length = reasoningContentBuilder.Length,
+                    total_chunks_merged = lineIndex
+                },
+                created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                merged_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+            
+            return System.Text.Json.JsonSerializer.Serialize(mergedResponse, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch (Exception ex)
+        {
+            return $"解析流式响应失败: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 处理数据集项的响应内容：如果来源是流式请求则合并，否则返回原始内容 - 带缓存优化
+    /// </summary>
+    private string GetProcessedDatasetItemResponse(DatasetItemDto item)
+    {
+        // 只处理来自请求日志的数据项
+        if (item.SourceType != "RequestLog" || string.IsNullOrEmpty(item.ExpectedOutput))
+        {
+            return item.ExpectedOutput ?? "";
+        }
+
+        // 使用项目ID作为缓存键
+        var cacheKey = $"{item.Id}_{item.ExpectedOutput?.GetHashCode()}";
+        if (_processedResponseCache.TryGetValue(cacheKey, out var cachedResponse))
+            return cachedResponse;
+
+        string result;
+        // 检查是否为流式响应（通过响应内容的格式判断）
+        if (IsStreamResponseFormat(item.ExpectedOutput))
+        {
+            // 流式响应：使用合并逻辑
+            result = ParseAndMergeStreamResponse(item.ExpectedOutput);
+        }
+        else
+        {
+            // 非流式响应：返回原始内容
+            result = item.ExpectedOutput;
+        }
+
+        // 缓存结果（限制缓存大小）
+        if (_processedResponseCache.Count < 500)
+        {
+            _processedResponseCache[cacheKey] = result;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 检测是否为流式响应格式
+    /// </summary>
+    private bool IsStreamResponseFormat(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return false;
+
+        // 检查是否包含流式响应的典型特征
+        return content.Contains("data: ") && content.Contains("choices") && content.Contains("delta");
+    }
+
+    /// <summary>
+    /// 数据集项导出DTO
+    /// </summary>
+    public class DatasetItemExportDto
+    {
+        public string Id { get; set; } = "";
+        public string Input { get; set; } = "";
+        public string ExpectedOutput { get; set; } = "";
+        public string SourceType { get; set; } = "";
+        public string ModelName { get; set; } = "";
+        public string ProxyName { get; set; } = "";
+        public string Difficulty { get; set; } = "";
+        public string Quality { get; set; } = "";
+        public string Tags { get; set; } = "";
+        public string Remarks { get; set; } = "";
+        public string CreateTime { get; set; } = "";
+        public string UpdateTime { get; set; } = "";
+    }
+
+    /// <summary>
+    /// 组件销毁时清理资源
+    /// </summary>
+    public void Dispose()
+    {
+        _searchTimer?.Dispose();
+    }
+}
+
+<style>
+    .dataset-detail-container {
+        padding: 16px 24px;
+        background: #f5f5f5;
+        min-height: calc(100vh - 64px);
+    }
+
+    .dataset-header {
+        background: #fff;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .items-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    /* 数据项表格样式 */
+    .items-table .text-cell {
+        max-width: 100%;
+    }
+
+    .items-table .text-content {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        cursor: pointer;
+    }
+
+    .items-table .text-content:hover {
+        color: #1890ff;
+    }
+
+    /* 确保表格单元格不会因为内容过长而撑大 */
+    .items-table .ant-table-tbody > tr > td {
+        max-width: 0;
+        word-break: break-word;
+        word-wrap: break-word;
+        overflow: hidden;
+    }
+</style> 

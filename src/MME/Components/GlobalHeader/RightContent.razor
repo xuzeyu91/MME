@@ -1,0 +1,35 @@
+﻿@namespace MME.Components
+@inherits AntDomComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using MME.Services.Auth
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<Space Class="@ClassMapper.Class" Size="@("26")">
+    <AuthorizeView>
+        <Authorized>
+            <Dropdown>
+                <Overlay>
+                    <Menu>
+                        <MenuItem OnClick="HandleLogout">
+                            <Icon Type="logout" />
+                            退出登录
+                        </MenuItem>
+                    </Menu>
+                </Overlay>
+                <ChildContent>
+                    <Space Class="action">
+                        <Avatar Size="@AvatarSize.Small" Icon="user" Style="margin-right: 8px;" />
+                        <span class="anticon">@context.User.Identity.Name</span>
+                        <Icon Type="down" />
+                    </Space>
+                </ChildContent>
+            </Dropdown>
+        </Authorized>
+        <NotAuthorized>
+            <Button Type="@ButtonType.Primary" OnClick="@(() => NavigationManager.NavigateTo("/user/login"))">
+                登录
+            </Button>
+        </NotAuthorized>
+    </AuthorizeView>
+</Space>
+

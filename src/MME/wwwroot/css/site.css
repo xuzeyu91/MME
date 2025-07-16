@@ -1,0 +1,190 @@
+﻿/* stylelint-disable at-rule-empty-line-before,at-rule-name-space-after,at-rule-no-unknown */
+/* stylelint-disable no-duplicate-selectors */
+/* stylelint-disable */
+/* stylelint-disable declaration-bang-space-before,no-duplicate-selectors,string-no-newline */
+html,
+body,
+#root,
+#app,
+app {
+    height: 100%;
+}
+
+.colorWeak {
+    filter: invert(80%);
+}
+
+.ant-layout {
+    min-height: 100vh;
+}
+
+canvas {
+    display: block;
+}
+
+body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+ul,
+ol {
+    list-style: none;
+}
+
+.action {
+    cursor: pointer;
+}
+
+@media (max-width: 480px) {
+    .ant-table {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .ant-table-thead > tr > th,
+    .ant-table-tbody > tr > th,
+    .ant-table-thead > tr > td,
+    .ant-table-tbody > tr > td {
+        white-space: pre;
+    }
+
+        .ant-table-thead > tr > th > span,
+        .ant-table-tbody > tr > th > span,
+        .ant-table-thead > tr > td > span,
+        .ant-table-tbody > tr > td > span {
+            display: block;
+        }
+}
+
+@media screen and (-ms-high-contrast: active), (-ms-high-contrast: none) {
+    body .ant-design-pro > .ant-layout {
+        min-height: 100vh;
+    }
+}
+
+
+
+::-webkit-scrollbar {
+    width: 1px; /* ���ù������Ŀ��� */
+    height: 8px; /* ����ˮƽ�������ĸ߶� */
+}
+
+::-webkit-scrollbar-track {
+    background: #f5f5f5; /* ���ù���������ı���ɫ */
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1; /* ���ù�����Ĵָ�ı���ɫ�����϶��Ĳ��֣� */
+    border-radius: 8px; /* ���ù�����Ĵָ��Բ�� */
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555; /* �����ͣʱ������Ĵָ�ı���ɫ */
+    }
+
+/* ������Firefox */
+* {
+    scrollbar-width: thin; /* ���ù�����Ϊϸ�� */
+    scrollbar-color: #ccc #f1f1f1; /* ���ù�����Ĵָ�͹������ɫ */
+}
+
+/* HTML预览独立工具栏样式 */
+.html-preview-toolbar {
+    position: absolute;
+    top: 30px;
+    right: 8px;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(127, 127, 255, 0.2);
+}
+
+/* HTML预览按钮样式 */
+.html-preview-btn {
+    background: linear-gradient(135deg, #7F7FFF 0%, #9F9FFF 100%);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+    box-shadow: 0 1px 3px rgba(127, 127, 255, 0.3);
+}
+
+    .html-preview-btn:hover {
+        background: linear-gradient(135deg, #6F6FFF 0%, #8F8FFF 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 3px 12px rgba(127, 127, 255, 0.4);
+    }
+
+    .html-preview-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 1px 4px rgba(127, 127, 255, 0.3);
+    }
+
+    .html-preview-btn:focus {
+        box-shadow: 0 0 0 3px rgba(127, 127, 255, 0.3);
+    }
+
+/* 代码块容器样式优化 */
+pre[class*="language-"] {
+    position: relative;
+}
+
+    /* 原始toolbar样式保持不变 */
+    pre[class*="language-"] .toolbar {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .html-preview-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    .html-preview-toolbar {
+        gap: 2px;
+        padding: 2px;
+    }
+
+    /* 移动端时调整位置 */
+    .html-preview-toolbar {
+        top: 30px;
+    }
+}
+
+@media (max-width: 480px) {
+    .html-preview-toolbar {
+        position: static;
+        margin-top: 8px;
+        margin-bottom: 8px;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.98);
+    }
+
+    pre[class*="language-"] .toolbar ~ .html-preview-toolbar {
+        top: auto;
+    }
+}

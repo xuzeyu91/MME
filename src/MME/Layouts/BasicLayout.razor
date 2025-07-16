@@ -1,0 +1,58 @@
+﻿@namespace MME
+@inherits LayoutComponentBase
+@using AntDesign.ProLayout
+@using Microsoft.Extensions.Options
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IOptionsSnapshot<ProSettings> ProSettingsOptions
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<AuthorizeView>
+    <Authorized>
+        <AntDesign.ProLayout.BasicLayout 
+            Logo="@("https://gw.alipayobjects.com/zos/rmsportal/KDpgvguMpGfqaHPjicRK.svg")"
+            MenuData="_menuData"
+            Title="@ProSettingsOptions.Value.Title">
+            <RightContentRender>
+                <MME.Components.RightContent />
+            </RightContentRender>
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <FooterRender>
+                <FooterView Copyright="MME" Links="Links"></FooterView>
+            </FooterRender>
+        </AntDesign.ProLayout.BasicLayout>
+        <SettingDrawer />
+    </Authorized>
+    <NotAuthorized>
+        @{
+            // 如果用户未认证，重定向到登录页
+            NavigationManager.NavigateTo("/user/login", true);
+        }
+    </NotAuthorized>
+</AuthorizeView>
+
+@code
+{
+    private MenuDataItem[] _menuData = { };
+
+    [Inject] public HttpClient HttpClient { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _menuData = await HttpClient.GetFromJsonAsync<MenuDataItem[]>("data/menu.json");
+    }
+
+    public LinkItem[] Links { get; set; } =
+    {
+        // new LinkItem
+        // {
+        //     Key = "MME",
+        //     Title = "MME",
+        //     Href = "",
+        //     BlankTarget = true,
+        // }
+    };
+}

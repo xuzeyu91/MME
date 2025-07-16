@@ -1,0 +1,308 @@
+﻿@namespace MME.Pages
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+@inject NavigationManager NavigationManager
+
+<div class="home-container">
+    <!-- 首页Banner区域 -->
+    <div class="hero-section">
+        <Card Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; margin-bottom: 32px;">
+            <div style="text-align: center; padding: 40px 20px;">
+                <div style="margin-bottom: 24px;">
+                    <Icon Type="api" Style="font-size: 64px; color: #ffffff;" />
+                </div>
+                <Title Level="1" Style="color: white; margin-bottom: 16px;">MME</Title>
+                <Title Level="3" Style="color: rgba(255,255,255,0.9); font-weight: 400; margin-bottom: 24px;">
+                    Model Monitoring & Evaluation
+                </Title>
+                <Paragraph Style="color: rgba(255,255,255,0.8); font-size: 16px; max-width: 600px; margin: 0 auto 32px;">
+                    基于 .NET 8 + Ant Design Blazor 打造的 LLM 日志追踪 / 回放 / 评测一体化平台
+                </Paragraph>
+                <Space Size="@SpaceSize.Middle">
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Primary" Size="@ButtonSize.Large" 
+                                OnClick="@(() => NavigationManager.NavigateTo("/proxy-config"))"
+                                Style="background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3);">
+                            开始使用
+                        </Button>
+                    </SpaceItem>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Default" Size="@ButtonSize.Large" Ghost
+                                OnClick="@(() => NavigationManager.NavigateTo("/request-logs"))"
+                                Style="color: white; border-color: rgba(255,255,255,0.5);">
+                            查看日志
+                        </Button>
+                    </SpaceItem>
+                </Space>
+            </div>
+        </Card>
+    </div>
+
+    <!-- 核心功能特性 -->
+    <div style="margin-bottom: 48px;">
+        <Title Level="2" Style="text-align: center; margin-bottom: 32px;">
+            <Icon Type="star" Style="margin-right: 8px; color: #7F7FFF;" />
+            核心功能特性
+        </Title>
+        <Row Gutter="24">
+            <AntDesign.Col Span="8">
+                <Card Hoverable Style="height: 100%; text-align: center;">
+                    <div style="padding: 24px 16px;">
+                        <div style="margin-bottom: 16px;">
+                            <Icon Type="swap" Style="font-size: 48px; color: #52c41a;" />
+                        </div>
+                        <Title Level="4">智能代理切换</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            快速切换不同 LLM 服务商（OpenAI、Azure、Bedrock、私有模型），
+                            统一接口管理，灵活配置路由策略
+                        </Paragraph>
+                    </div>
+                </Card>
+            </AntDesign.Col>
+            <AntDesign.Col Span="8">
+                <Card Hoverable Style="height: 100%; text-align: center;">
+                    <div style="padding: 24px 16px;">
+                        <div style="margin-bottom: 16px;">
+                            <Icon Type="bar-chart" Style="font-size: 48px; color: #7F7FFF;" />
+                        </div>
+                        <Title Level="4">A/B 测试评估</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            对同一批请求进行 A/B 测试或回归测试，
+                            量化分析不同模型的效果表现，科学决策模型选择
+                        </Paragraph>
+                    </div>
+                </Card>
+            </AntDesign.Col>
+            <AntDesign.Col Span="8">
+                <Card Hoverable Style="height: 100%; text-align: center;">
+                    <div style="padding: 24px 16px;">
+                        <div style="margin-bottom: 16px;">
+                            <Icon Type="monitor" Style="font-size: 48px; color: #fa541c;" />
+                        </div>
+                        <Title Level="4">实时监控追踪</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            采集线上日志，实时监控 API 调用情况，
+                            事后定位 prompt、参数、token 使用量和延迟问题
+                        </Paragraph>
+                    </div>
+                </Card>
+            </AntDesign.Col>
+        </Row>
+    </div>
+
+    <!-- 技术优势 -->
+    <div style="margin-bottom: 48px;">
+        <Title Level="2" Style="text-align: center; margin-bottom: 32px;">
+            <Icon Type="rocket" Style="margin-right: 8px; color: #722ed1;" />
+            技术优势
+        </Title>
+        <Row Gutter="16">
+            <AntDesign.Col Span="12">
+                <Card Style="margin-bottom: 16px;">
+                    <Space>
+                        <SpaceItem>
+                            <Avatar Style="background-color: #7F7FFF;" Icon="code" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <div>
+                                <Title Level="5" Style="margin-bottom: 4px;">.NET 8 + Blazor</Title>
+                                <Text Type="@TextElementType.Secondary">
+                                    现代化 Web 框架，高性能服务端渲染
+                                </Text>
+                            </div>
+                        </SpaceItem>
+                    </Space>
+                </Card>
+            </AntDesign.Col>
+            <AntDesign.Col Span="12">
+                <Card Style="margin-bottom: 16px;">
+                    <Space>
+                        <SpaceItem>
+                            <Avatar Style="background-color: #52c41a;" Icon="ant-design" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <div>
+                                <Title Level="5" Style="margin-bottom: 4px;">Ant Design Blazor</Title>
+                                <Text Type="@TextElementType.Secondary">
+                                    企业级 UI 组件库，专业美观的界面体验
+                                </Text>
+                            </div>
+                        </SpaceItem>
+                    </Space>
+                </Card>
+            </AntDesign.Col>
+            <AntDesign.Col Span="12">
+                <Card Style="margin-bottom: 16px;">
+                    <Space>
+                        <SpaceItem>
+                            <Avatar Style="background-color: #fa541c;" Icon="database" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <div>
+                                <Title Level="5" Style="margin-bottom: 4px;">SqlSugar ORM</Title>
+                                <Text Type="@TextElementType.Secondary">
+                                    Code First 模式，灵活的数据访问层
+                                </Text>
+                            </div>
+                        </SpaceItem>
+                    </Space>
+                </Card>
+            </AntDesign.Col>
+            <AntDesign.Col Span="12">
+                <Card Style="margin-bottom: 16px;">
+                    <Space>
+                        <SpaceItem>
+                            <Avatar Style="background-color: #722ed1;" Icon="api" />
+                        </SpaceItem>
+                        <SpaceItem>
+                            <div>
+                                <Title Level="5" Style="margin-bottom: 4px;">RESTful API</Title>
+                                <Text Type="@TextElementType.Secondary">
+                                    标准化接口设计，易于集成和扩展
+                                </Text>
+                            </div>
+                        </SpaceItem>
+                    </Space>
+                </Card>
+            </AntDesign.Col>
+        </Row>
+    </div>
+
+    <!-- 快速开始 -->
+    <Card Style="background: #fafafa; margin-bottom: 48px;">
+        <div style="text-align: center; padding: 32px 20px;">
+            <Title Level="2" Style="margin-bottom: 24px;">
+                <Icon Type="play-circle" Style="margin-right: 8px; color: #7F7FFF;" />
+                快速开始
+            </Title>
+            <Row Gutter="32">
+                <AntDesign.Col Span="6">
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 16px;">
+                            <Badge Count="1" Style="background-color: #7F7FFF;">
+                                <Avatar Size="@AvatarSize.Large" Style="background-color: #e6f7ff; color: #7F7FFF;" Icon="setting" />
+                            </Badge>
+                        </div>
+                        <Title Level="5">配置代理</Title>
+                        <Text Type="@TextElementType.Secondary">添加 LLM 服务配置</Text>
+                    </div>
+                </AntDesign.Col>
+                <AntDesign.Col Span="6">
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 16px;">
+                            <Badge Count="2" Style="background-color: #52c41a;">
+                                <Avatar Size="@AvatarSize.Large" Style="background-color: #f6ffed; color: #52c41a;" Icon="api" />
+                            </Badge>
+                        </div>
+                        <Title Level="5">接入应用</Title>
+                        <Text Type="@TextElementType.Secondary">使用生成的 Token</Text>
+                    </div>
+                </AntDesign.Col>
+                <AntDesign.Col Span="6">
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 16px;">
+                            <Badge Count="3" Style="background-color: #fa541c;">
+                                <Avatar Size="@AvatarSize.Large" Style="background-color: #fff2e8; color: #fa541c;" Icon="eye" />
+                            </Badge>
+                        </div>
+                        <Title Level="5">监控日志</Title>
+                        <Text Type="@TextElementType.Secondary">实时查看请求详情</Text>
+                    </div>
+                </AntDesign.Col>
+                <AntDesign.Col Span="6">
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 16px;">
+                            <Badge Count="4" Style="background-color: #722ed1;">
+                                <Avatar Size="@AvatarSize.Large" Style="background-color: #f9f0ff; color: #722ed1;" Icon="bar-chart" />
+                            </Badge>
+                        </div>
+                        <Title Level="5">数据分析</Title>
+                        <Text Type="@TextElementType.Secondary">评估模型表现</Text>
+                    </div>
+                </AntDesign.Col>
+            </Row>
+        </div>
+    </Card>
+
+    <!-- 应用场景 -->
+    <div style="margin-bottom: 48px;">
+        <Title Level="2" Style="text-align: center; margin-bottom: 32px;">
+            <Icon Type="bulb" Style="margin-right: 8px; color: #faad14;" />
+            应用场景
+        </Title>
+        <Row Gutter="24">
+            <AntDesign.Col Span="12">
+                <Timeline>
+                    <TimelineItem Color="TimelineDotColor.Blue">
+                        <Title Level="5">企业 AI 应用开发</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            为企业内部 AI 应用提供统一的模型接入和管理平台
+                        </Paragraph>
+                    </TimelineItem>
+                    <TimelineItem Color="TimelineDotColor.Green">
+                        <Title Level="5">模型效果评估</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            对不同 LLM 模型进行 A/B 测试，科学评估模型效果
+                        </Paragraph>
+                    </TimelineItem>
+                    <TimelineItem Color="TimelineDotColor.Red">
+                        <Title Level="5">成本优化分析</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            监控 Token 使用情况，优化 API 调用成本
+                        </Paragraph>
+                    </TimelineItem>
+                </Timeline>
+            </AntDesign.Col>
+            <AntDesign.Col Span="12">
+                <Timeline>
+                    <TimelineItem Color="TimelineDotColor.Blue">
+                        <Title Level="5">数据集标注</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            给模型输出结果加标签，沉淀高质量数据集
+                        </Paragraph>
+                    </TimelineItem>
+                    <TimelineItem Color="TimelineDotColor.Gray">
+                        <Title Level="5">故障排查定位</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            通过详细日志快速定位线上问题和性能瓶颈
+                        </Paragraph>
+                    </TimelineItem>
+                    <TimelineItem Color="TimelineDotColor.Red">
+                        <Title Level="5">合规审计</Title>
+                        <Paragraph Style="color: rgba(0,0,0,0.65);">
+                            完整记录 AI 服务调用历史，满足合规审计要求
+                        </Paragraph>
+                    </TimelineItem>
+                </Timeline>
+            </AntDesign.Col>
+        </Row>
+    </div>
+</div>
+
+<style>
+    .home-container {
+        padding: 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .hero-section .ant-card-body {
+        padding: 0;
+    }
+
+    .ant-timeline-item-content {
+        margin-left: 20px;
+    }
+
+    .ant-card:hover {
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+</style>
+
+@code {
+
+}

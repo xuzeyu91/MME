@@ -1,0 +1,253 @@
+@page "/dataset-list"
+@using MME.Domain.Repositories.Dataset
+@using MME.Domain.Services
+@using MME.Domain.Model
+@using AntDesign
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@attribute [Authorize]
+@inject IDatasetService DatasetService
+@inject IMessageService MessageService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<PageTitle>数据集管理</PageTitle>
+
+<div style="padding: 16px 24px; background: #f5f5f5; min-height: calc(100vh - 64px);">
+    <PageHeader Title="数据集管理" SubTitle="管理模型评测用的数据集">
+        <PageHeaderExtra>
+            <Space>
+                <SpaceItem>
+                    <Button Type="@ButtonType.Primary" Icon="plus" OnClick="ShowCreateModal">
+                        创建数据集
+                    </Button>
+                </SpaceItem>
+                <SpaceItem>
+                    <Button Type="@ButtonType.Default" Icon="reload" OnClick="RefreshDatasets" Loading="@loading">
+                        刷新
+                    </Button>
+                </SpaceItem>
+            </Space>
+        </PageHeaderExtra>
+    </PageHeader>
+
+    <Card Bordered="false">
+        <Table DataSource="@datasets" TItem="DatasetDto" Loading="@loading" 
+               Bordered Size="@TableSize.Small">
+            <AntDesign.Column Title="数据集名称" DataIndex="Name" TData="string">
+                <Text Strong>@context.Name</Text>
+                @if (!string.IsNullOrEmpty(context.Description))
+                {
+                    <br />
+                    <small style="color: #8c8c8c; font-size: 12px;">@context.Description</small>
+                }
+            </AntDesign.Column>
+            <AntDesign.Column Title="类型" DataIndex="Type" TData="string">
+                <Tag Color="@("blue")">@context.TypeText</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="状态" DataIndex="Status" TData="DatasetStatus">
+                <Tag Color="@(context.Status == DatasetStatus.Active ? "success" : "warning")">@context.StatusText</Tag>
+            </AntDesign.Column>
+            <AntDesign.Column Title="数据项数量" DataIndex="ItemCount" TData="int">
+                <Text Strong>@context.ItemCount</Text> 项
+            </AntDesign.Column>
+            <AntDesign.Column Title="创建时间" DataIndex="CreateTime" TData="DateTime">
+                @context.CreateTime.ToString("yyyy-MM-dd")
+            </AntDesign.Column>
+            <ActionColumn Title="操作">
+                <Space>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                OnClick="() => ShowEditModal(context)">
+                            编辑
+                        </Button>
+                    </SpaceItem>
+                    <SpaceItem>
+                        <Popconfirm Title="确定要删除这个数据集吗？" 
+                                   OnConfirm="() => DeleteDataset(context.Id)"
+                                   OkText="确定" CancelText="取消">
+                            <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" Danger>
+                                删除
+                            </Button>
+                        </Popconfirm>
+                    </SpaceItem>
+                </Space>
+            </ActionColumn>
+        </Table>
+    </Card>
+</div>
+
+<!-- 创建/编辑数据集模态框 -->
+<Modal Title="@(editingDataset == null ? "创建数据集" : "编辑数据集")" 
+       Visible="@modalVisible" 
+       Width="600"
+       OnCancel="() => modalVisible = false"
+       OnOk="SaveDataset"
+       ConfirmLoading="@saveLoading">
+    <Form Model="@currentRequest" Layout="@FormLayout.Vertical">
+        <FormItem Label="数据集名称" Required>
+            <Input @bind-Value="currentRequest.Name" Placeholder="请输入数据集名称" />
+        </FormItem>
+
+        <FormItem Label="数据集类型" Required>
+            <Select @bind-Value="currentRequest.Type" TItemValue="string" TItem="string" Placeholder="请选择类型">
+                <SelectOptions>
+                    <SelectOption TItemValue="string" TItem="string" Label="问答 (QA)" Value="@("QA")" />
+                    <SelectOption TItemValue="string" TItem="string" Label="对话 (Chat)" Value="@("Chat")" />
+                    <SelectOption TItemValue="string" TItem="string" Label="文本完成 (Completion)" Value="@("Completion")" />
+                </SelectOptions>
+            </Select>
+        </FormItem>
+
+        <FormItem Label="描述">
+            <TextArea @bind-Value="currentRequest.Description" Placeholder="请输入描述" Rows="3" />
+        </FormItem>
+
+        <FormItem Label="创建者">
+            <Input @bind-Value="currentRequest.Creator" Placeholder="请输入创建者名称" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private List<DatasetDto> datasets = new();
+    private bool loading = false;
+    private bool saveLoading = false;
+    private bool modalVisible = false;
+    
+    private DatasetDto? editingDataset = null;
+    private CreateDatasetRequest currentRequest = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDatasets();
+    }
+
+    private async Task LoadDatasets()
+    {
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var queryParams = new DatasetQueryParams
+            {
+                Page = 1,
+                PageSize = 50,
+                SortField = "UpdateTime",
+                SortDescending = true
+            };
+
+            var result = await DatasetService.GetDatasetsAsync(queryParams);
+            datasets = result.List;
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"加载数据集失败：{ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshDatasets()
+    {
+        await LoadDatasets();
+    }
+
+    private void ShowCreateModal()
+    {
+        editingDataset = null;
+        currentRequest = new CreateDatasetRequest();
+        modalVisible = true;
+    }
+
+    private void ShowEditModal(DatasetDto dataset)
+    {
+        editingDataset = dataset;
+        currentRequest = new CreateDatasetRequest
+        {
+            Name = dataset.Name,
+            Description = dataset.Description,
+            Type = dataset.Type,
+            Creator = dataset.Creator
+        };
+        modalVisible = true;
+    }
+
+    private async Task SaveDataset()
+    {
+        if (string.IsNullOrWhiteSpace(currentRequest.Name))
+        {
+            _ = MessageService.Warning("请输入数据集名称");
+            return;
+        }
+
+        saveLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (editingDataset == null)
+            {
+                var result = await DatasetService.CreateDatasetAsync(currentRequest);
+                if (result.Success)
+                {
+                    _ = MessageService.Success(result.Message);
+                    modalVisible = false;
+                    await LoadDatasets();
+                }
+                else
+                {
+                    _ = MessageService.Error(result.Message);
+                }
+            }
+            else
+            {
+                var result = await DatasetService.UpdateDatasetAsync(editingDataset.Id, currentRequest);
+                if (result.Success)
+                {
+                    _ = MessageService.Success(result.Message);
+                    modalVisible = false;
+                    await LoadDatasets();
+                }
+                else
+                {
+                    _ = MessageService.Error(result.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"保存失败：{ex.Message}");
+        }
+        finally
+        {
+            saveLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteDataset(Guid datasetId)
+    {
+        try
+        {
+            var result = await DatasetService.DeleteDatasetAsync(datasetId);
+            if (result.Success)
+            {
+                _ = MessageService.Success(result.Message);
+                await LoadDatasets();
+            }
+            else
+            {
+                _ = MessageService.Error(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = MessageService.Error($"删除失败：{ex.Message}");
+        }
+    }
+} 

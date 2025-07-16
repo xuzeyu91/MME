@@ -1,0 +1,541 @@
+@page "/proxy-config"
+@using MME.Domain.Services
+@using AntDesign
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IProxyService ProxyService
+@inject IMessageService MessageService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>代理配置管理</PageTitle>
+
+<div class="page-container">
+    <PageHeader Title="代理配置管理" SubTitle="管理OpenAI API代理配置">
+        <PageHeaderExtra>
+            <Button Type="@ButtonType.Primary" Icon="plus" OnClick="ShowCreateModal">
+                添加配置
+            </Button>
+        </PageHeaderExtra>
+    </PageHeader>
+
+    <Card>
+        <Table DataSource="@configs" TItem="MME.Domain.Repositories.ProxyConfig" Loading="@loading" Bordered ScrollX="1400">
+            <AntDesign.Column Title="配置名称" DataIndex="Name" TData="string" Width="120" />
+            <AntDesign.Column Title="目标地址" DataIndex="TargetUrl" TData="string" Width="200">
+                <Text Code>@context.TargetUrl</Text>
+            </AntDesign.Column>
+            <AntDesign.Column Title="Bearer Token" DataIndex="BearerToken" TData="string" Width="200">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <Text Code Copyable>@context.BearerToken</Text>
+                    <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                            Icon="reload" OnClick="() => RefreshToken(context.Id)">
+                        刷新
+                    </Button>
+                </div>
+            </AntDesign.Column>
+            <AntDesign.Column Title="状态" DataIndex="IsEnabled" TData="bool" Width="80">
+                <Switch Value="@context.IsEnabled" OnChange="(value) => ToggleConfig(context.Id, value)" />
+            </AntDesign.Column>
+            <AntDesign.Column Title="支持接口" TData="string" Width="150">
+                <div style="max-height: 60px; overflow-y: auto;">
+                    @{
+                        var paths = GetSupportedPathsDisplay(context.SupportedPaths);
+                    }
+                    @foreach (var path in paths)
+                    {
+                        <Tag Style="margin: 2px; font-size: 12px;">@path</Tag>
+                    }
+                </div>
+            </AntDesign.Column>
+         
+            <ActionColumn Title="操作" Width="120">
+                <Space>
+                    <SpaceItem>
+                        <Button Type="@ButtonType.Primary" Size="@ButtonSize.Small" 
+                                Icon="edit" OnClick="() => ShowEditModal(context)">
+                            编辑
+                        </Button>
+                    </SpaceItem>
+                    <SpaceItem>
+                        <Popconfirm Title="确定要删除这个配置吗？" 
+                                    OnConfirm="() => DeleteConfig(context.Id)">
+                            <Button Type="@ButtonType.Primary" Danger Size="@ButtonSize.Small" 
+                                    Icon="delete">
+                                删除
+                            </Button>
+                        </Popconfirm>
+                    </SpaceItem>
+                </Space>
+            </ActionColumn>
+        </Table>
+    </Card>
+</div>
+
+<!-- 创建/编辑模态框 -->
+<Modal Title="@(editingConfig == null ? "创建代理配置" : "编辑代理配置")" 
+       Visible="@modalVisible" 
+       OnOk="@HandleOk" 
+       OnCancel="@HandleCancel"
+       ConfirmLoading="@modalLoading"
+       Width="900"
+       Centered="true">
+    <Form Model="@configForm" LabelCol="new ColLayoutParam { Span = 6 }" WrapperCol="new ColLayoutParam { Span = 18 }">
+        
+        <!-- 基础配置 -->
+        <Divider>
+            <Text Strong Style="color: #7F7FFF;">
+                <Icon Type="setting" Style="margin-right: 8px;" />
+                基础配置
+            </Text>
+        </Divider>
+        
+        <Row Gutter="24">
+            <Col Span="12">
+                <FormItem Label="配置名称" Required>
+                    <Input @bind-Value="@configForm.Name" 
+                           Placeholder="请输入配置名称" 
+                           MaxLength="50"
+                           ShowCount />
+                </FormItem>
+            </Col>
+            <Col Span="12">
+                <FormItem Label="目标地址" Required>
+                    <Input @bind-Value="@configForm.TargetUrl" 
+                           Placeholder="例如：https://api.openai.com" />
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <FormItem Label="API密钥" Required>
+            <InputPassword @bind-Value="@configForm.ApiKey" 
+                          Placeholder="请输入API密钥" 
+                          VisibilityToggle="true" />
+        </FormItem>
+        
+        <FormItem Label="描述信息">
+            <TextArea @bind-Value="@configForm.Description" 
+                     Placeholder="请输入配置描述信息" 
+                     Rows="3" 
+                     MaxLength="200"
+                     ShowCount />
+        </FormItem>
+        
+        <!-- 高级配置 -->
+        <Divider>
+            <Text Strong Style="color: #7F7FFF;">
+                <Icon Type="control" Style="margin-right: 8px;" />
+                高级配置
+            </Text>
+        </Divider>
+        
+        <Row Gutter="24">
+            <Col Span="12">
+                <FormItem Label="超时时间(秒)">
+                    <AntDesign.InputNumber @bind-Value="@configForm.TimeoutSeconds" 
+                                Min="1" Max="3000" 
+                                Placeholder="默认300秒" 
+                                Style="width: 100%" />
+                </FormItem>
+            </Col>
+            <Col Span="12">
+                <FormItem Label="重试次数">
+                    <AntDesign.InputNumber @bind-Value="@configForm.MaxRetries" 
+                                Min="0" Max="10" 
+                                Placeholder="默认3次" 
+                                Style="width: 100%" />
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <!-- 日志配置 -->
+        <Divider>
+            <Text Strong Style="color: #7F7FFF;">
+                <Icon Type="file-text" Style="margin-right: 8px;" />
+                日志配置
+            </Text>
+        </Divider>
+        
+        <Row Gutter="24">
+            <Col Span="12">
+                <FormItem Label="记录请求体">
+                    <div>
+                        <Switch @bind-Value="@configForm.LogRequestBody" 
+                               CheckedChildren="开启" 
+                               UnCheckedChildren="关闭" />
+                        <div style="color: #8c8c8c; font-size: 12px; margin-top: 4px;">
+                            记录API请求的详细内容
+                        </div>
+                    </div>
+                </FormItem>
+            </Col>
+            <Col Span="12">
+                <FormItem Label="记录响应体">
+                    <div>
+                        <Switch @bind-Value="@configForm.LogResponseBody" 
+                               CheckedChildren="开启" 
+                               UnCheckedChildren="关闭" />
+                        <div style="color: #8c8c8c; font-size: 12px; margin-top: 4px;">
+                            记录API响应的详细内容
+                        </div>
+                    </div>
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <!-- 接口配置 -->
+        <Divider>
+            <Text Strong Style="color: #7F7FFF;">
+                <Icon Type="api" Style="margin-right: 8px;" />
+                支持的接口
+            </Text>
+        </Divider>
+        
+        <FormItem Label="接口列表" LabelCol="new ColLayoutParam { Span = 4 }" WrapperCol="new ColLayoutParam { Span = 20 }">
+            <div>
+                <CheckboxGroup @bind-Value="@selectedPaths" Options="@pathOptions" />
+                <div style="color: #8c8c8c; font-size: 12px; margin-top: 8px;">
+                    <Icon Type="info-circle" Style="margin-right: 4px;" />
+                    选择此配置支持的API接口类型
+                </div>
+            </div>
+        </FormItem>
+        
+    </Form>
+</Modal>
+
+@code {
+    private List<MME.Domain.Repositories.ProxyConfig> configs = new();
+    private bool loading = false;
+    private bool modalVisible = false;
+    private bool modalLoading = false;
+    private MME.Domain.Repositories.ProxyConfig? editingConfig = null;
+    private ConfigForm configForm = new();
+    private string[] selectedPaths = { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+
+    private CheckboxOption<string>[] pathOptions = new[]
+    {
+        new CheckboxOption<string> { Label = "Chat Completions", Value = "/v1/chat/completions" },
+        new CheckboxOption<string> { Label = "Embeddings", Value = "/v1/embeddings" },
+        new CheckboxOption<string> { Label = "Rerank", Value = "/v1/rerank" },
+        new CheckboxOption<string> { Label = "Models", Value = "/v1/models" },
+        new CheckboxOption<string> { Label = "Fine-tuning", Value = "/v1/fine_tuning/jobs" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigs();
+    }
+
+    private async Task LoadConfigs()
+    {
+        loading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // 忽略组件已销毁时的状态更新错误
+        }
+        
+        try
+        {
+            configs = await ProxyService.GetAllConfigsAsync();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                _= MessageService.Error($"加载配置失败：{ex.Message}");
+            }
+            catch (Exception)
+            {
+                // 忽略组件已销毁时的消息服务调用错误
+            }
+        }
+        finally
+        {
+            loading = false;
+            try
+            {
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // 忽略组件已销毁时的状态更新错误
+            }
+        }
+    }
+
+    private void ShowCreateModal()
+    {
+        editingConfig = null;
+        configForm = new ConfigForm();
+        selectedPaths = new[] { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+        modalVisible = true;
+    }
+
+    private void ShowEditModal(Domain.Repositories.ProxyConfig config)
+    {
+        editingConfig = config;
+        configForm = new ConfigForm
+        {
+            Name = config.Name,
+            TargetUrl = config.TargetUrl,
+            ApiKey = config.ApiKey,
+            Description = config.Description,
+            TimeoutSeconds = config.TimeoutSeconds,
+            MaxRetries = config.MaxRetries,
+            LogRequestBody = config.LogRequestBody,
+            LogResponseBody = config.LogResponseBody
+        };
+        
+        try
+        {
+            selectedPaths = System.Text.Json.JsonSerializer.Deserialize<string[]>(config.SupportedPaths) ?? new string[0];
+        }
+        catch
+        {
+            selectedPaths = new[] { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+        }
+        
+        modalVisible = true;
+    }
+
+    private async Task HandleOk()
+    {
+        if (string.IsNullOrWhiteSpace(configForm.Name) || 
+            string.IsNullOrWhiteSpace(configForm.TargetUrl) || 
+            string.IsNullOrWhiteSpace(configForm.ApiKey))
+        {
+            try { _ = MessageService.Warning("请填写所有必填字段"); } catch { }
+            return;
+        }
+
+        modalLoading = true;
+        try
+        {
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // 忽略组件已销毁时的状态更新错误
+        }
+
+        try
+        {
+            var supportedPathsJson = System.Text.Json.JsonSerializer.Serialize(selectedPaths);
+            
+            if (editingConfig == null)
+            {
+                await ProxyService.CreateConfigAsync(
+                    configForm.Name,
+                    configForm.TargetUrl,
+                    configForm.ApiKey,
+                    configForm.Description,
+                    supportedPathsJson,
+                    configForm.TimeoutSeconds,
+                    configForm.MaxRetries,
+                    configForm.LogRequestBody,
+                    configForm.LogResponseBody);
+                try { _ = MessageService.Success("配置创建成功"); } catch { }
+            }
+            else
+            {
+                await ProxyService.UpdateConfigAsync(
+                    editingConfig.Id,
+                    configForm.Name,
+                    configForm.TargetUrl,
+                    configForm.ApiKey,
+                    configForm.Description,
+                    supportedPathsJson,
+                    configForm.TimeoutSeconds,
+                    configForm.MaxRetries,
+                    configForm.LogRequestBody,
+                    configForm.LogResponseBody);
+                try { _ = MessageService.Success("配置更新成功"); } catch { }
+            }
+
+            modalVisible = false;
+            await LoadConfigs();
+        }
+        catch (Exception ex)
+        {
+            try { _ = MessageService.Error($"操作失败：{ex.Message}"); } catch { }
+        }
+        finally
+        {
+            modalLoading = false;
+            try
+            {
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // 忽略组件已销毁时的状态更新错误
+            }
+        }
+    }
+
+    private void HandleCancel()
+    {
+        modalVisible = false;
+        configForm = new ConfigForm();
+        editingConfig = null;
+    }
+
+    private async Task DeleteConfig(Guid id)
+    {
+        try
+        {
+            await ProxyService.DeleteConfigAsync(id);
+            try { _ = MessageService.Success("配置删除成功"); } catch { }
+            await LoadConfigs();
+        }
+        catch (Exception ex)
+        {
+            try { _= MessageService.Error($"删除失败：{ex.Message}"); } catch { }
+        }
+    }
+
+    private async Task ToggleConfig(Guid id, bool isEnabled)
+    {
+        try
+        {
+            await ProxyService.ToggleConfigAsync(id, isEnabled);
+            try { _= MessageService.Success(isEnabled ? "配置已启用" : "配置已禁用"); } catch { }
+            await LoadConfigs();
+        }
+        catch (Exception ex)
+        {
+            try { _= MessageService.Error($"操作失败：{ex.Message}"); } catch { }
+        }
+    }
+
+    private async Task RefreshToken(Guid id)
+    {
+        try
+        {
+            var newToken = await ProxyService.RefreshBearerTokenAsync(id);
+            try { _= MessageService.Success("Token刷新成功"); } catch { }
+            await LoadConfigs();
+        }
+        catch (Exception ex)
+        {
+            try { _= MessageService.Error($"刷新失败：{ex.Message}"); } catch { }
+        }
+    }
+
+    private string[] GetSupportedPathsDisplay(string supportedPaths)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(supportedPaths))
+                return new string[0];
+                
+            var paths = System.Text.Json.JsonSerializer.Deserialize<string[]>(supportedPaths) ?? new string[0];
+            return paths.Select(p => p.Replace("/v1/", "")).ToArray();
+        }
+        catch
+        {
+            return new string[0];
+        }
+    }
+
+    public class ConfigForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string TargetUrl { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int TimeoutSeconds { get; set; } = 300;
+        public int MaxRetries { get; set; } = 3;
+        public bool LogRequestBody { get; set; } = true;
+        public bool LogResponseBody { get; set; } = true;
+    }
+}
+
+<style>
+    .page-container {
+        padding: 24px;
+    }
+
+    /* 弹窗优化样式 */
+    .ant-modal-body {
+        max-height: 75vh;
+        overflow-y: auto;
+        padding: 24px;
+    }
+
+    /* 分组标题样式 */
+    .ant-divider {
+        margin: 24px 0 20px 0;
+        font-size: 16px;
+    }
+
+    .ant-divider:first-of-type {
+        margin-top: 8px;
+    }
+
+    /* 表单项间距优化 */
+    .ant-form-item {
+        margin-bottom: 24px;
+    }
+
+    /* 输入框增强样式 */
+    .ant-input, .ant-input-password, .ant-input-number {
+        border-radius: 6px;
+        transition: all 0.3s;
+    }
+
+    .ant-input:focus, .ant-input-password:focus, .ant-input-number:focus {
+        border-color: #40a9ff;
+        box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+    }
+
+    /* 开关组件样式 */
+    .ant-switch {
+        margin-bottom: 8px;
+    }
+
+    /* 复选框组美化 */
+    .ant-checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .ant-checkbox-wrapper {
+        padding: 8px 12px;
+        border: 1px solid #f0f0f0;
+        border-radius: 6px;
+        transition: all 0.3s;
+    }
+
+    .ant-checkbox-wrapper:hover {
+        border-color: #d9d9d9;
+        background-color: #fafafa;
+    }
+
+    .ant-checkbox-wrapper-checked {
+        border-color: #7F7FFF;
+        background-color: #f6ffed;
+    }
+
+    /* 响应式设计 */
+    @@media (max-width: 768px) {
+        .ant-modal {
+            max-width: 95vw;
+            margin: 10px auto;
+        }
+        
+        .ant-col-12 {
+            width: 100% !important;
+            margin-bottom: 16px;
+        }
+        
+        .ant-form-item-label {
+            text-align: left !important;
+        }
+    }
+</style> 
