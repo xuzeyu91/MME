@@ -1,5 +1,5 @@
 # Build stage
-FROM swr.cn-north-1.myhuaweicloud.com/base-images/dotnet-sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy csproj and restore as distinct layers
@@ -13,7 +13,7 @@ RUN dotnet build "MME.csproj" -c Release -o /app/build
 RUN dotnet publish "MME.csproj" -c Release -o /app/publish
 
 # Runtime stage
-FROM swr.cn-north-1.myhuaweicloud.com/base-images/aspnetruntime:8.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /service
 EXPOSE 5000
 
