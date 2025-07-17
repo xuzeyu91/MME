@@ -11,15 +11,15 @@
                 <Overlay>
                     <Menu>
                         <MenuItem OnClick="HandleLogout">
-                            <Icon Type="logout" />
+                            <Icon Type="logout" Style="margin-right: 8px;" />
                             退出登录
                         </MenuItem>
                     </Menu>
                 </Overlay>
                 <ChildContent>
-                    <Space Class="action">
-                        <Avatar Size="@AvatarSize.Small" Icon="user" Style="margin-right: 8px;" />
-                        <span class="anticon">@context.User.Identity.Name</span>
+                    <Space Class="action user-dropdown" Size="@SpaceSize.Small">
+                        <Avatar Size="@AvatarSize.Small" Icon="user" />
+                        <span class="username-text">@GetUserName(context as Microsoft.AspNetCore.Components.Authorization.AuthenticationState)</span>
                         <Icon Type="down" />
                     </Space>
                 </ChildContent>

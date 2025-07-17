@@ -27,10 +27,16 @@
             <AntDesign.Column Title="Bearer Token" DataIndex="BearerToken" TData="string" Width="200">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <Text Code Copyable>@context.BearerToken</Text>
-                    <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
-                            Icon="reload" OnClick="() => RefreshToken(context.Id)">
-                        刷新
-                    </Button>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                Icon="copy" OnClick="() => CopyToken(context.BearerToken)">
+                            复制
+                        </Button>
+                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
+                                Icon="reload" OnClick="() => RefreshToken(context.Id)">
+                            刷新
+                        </Button>
+                    </div>
                 </div>
             </AntDesign.Column>
             <AntDesign.Column Title="状态" DataIndex="IsEnabled" TData="bool" Width="80">
@@ -426,6 +432,19 @@
         }
     }
 
+    private async Task CopyToken(string token)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", token);
+            try { _ = MessageService.Success("API密钥已复制到剪贴板"); } catch { }
+        }
+        catch (Exception ex)
+        {
+            try { _ = MessageService.Error($"复制失败：{ex.Message}"); } catch { }
+        }
+    }
+
     private string[] GetSupportedPathsDisplay(string supportedPaths)
     {
         try
@@ -538,4 +557,4 @@
             text-align: left !important;
         }
     }
-</style> 
+</style>

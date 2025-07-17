@@ -67,6 +67,12 @@ public class OpenAIProxyController : ControllerBase
                 return BadRequest(new { error = "Proxy configuration is disabled" });
             }
 
+            // 检查请求路径是否在支持的接口列表中
+            if (!IsPathSupported(proxyConfig.SupportedPaths, targetPath))
+            {
+                return BadRequest(new { error = $"Endpoint {targetPath} is not supported by this proxy configuration" });
+            }
+
             // 创建支持自动解压缩的HTTP客户端
             using var handler = new HttpClientHandler()
             {
@@ -181,6 +187,29 @@ public class OpenAIProxyController : ControllerBase
         {
             _logger.LogError(ex, "Unexpected error for path: {Path}", targetPath);
             return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 检查请求路径是否在支持的接口列表中
+    /// </summary>
+    private static bool IsPathSupported(string supportedPaths, string requestPath)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(supportedPaths))
+                return false;
+
+            var pathArray = JsonSerializer.Deserialize<string[]>(supportedPaths);
+            if (pathArray == null || pathArray.Length == 0)
+                return false;
+
+            return pathArray.Any(path => requestPath.StartsWith(path, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            // 解析失败，默认不支持
+            return false;
         }
     }
 
