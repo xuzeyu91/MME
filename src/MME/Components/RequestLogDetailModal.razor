@@ -1,7 +1,10 @@
-@using MME.Domain.Repositories
-@using AntDesign
 @using Newtonsoft.Json
 @using Newtonsoft.Json.Linq
+@using System.Linq
+@using MME.Domain.Repositories
+@using MME.Domain
+@using AntDesign
+@using Microsoft.AspNetCore.Components
 
 <!-- 日志详情模态框 -->
 <Modal Title="请求详情" 
@@ -103,14 +106,14 @@
                     <div style="margin-bottom: 16px;">
                         <Alert Type="@AlertType.Info" ShowIcon="true" Closable="false">
                             <MessageTemplate>
-                                <Text>此功能将流式响应中的多个片段合并为完整内容，提取 content 和 reasoning_content 字段</Text>
+                                <Text>此功能将流式响应中的多个片段合并为完整内容</Text>
                             </MessageTemplate>
                         </Alert>
                     </div>
                     <div>
                         <Title Level="5">合并后的完整响应</Title>
                         <div style="background: #1f1f1f; padding: 16px; border-radius: 8px; max-height: 400px; overflow-y: auto; border: 1px solid #e8e8e8;">
-                            <pre style="margin: 0; white-space: pre-wrap; color: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; line-height: 1.5;">@ParseAndMergeStreamResponse(LogData.ResponseBody)</pre>
+                            <pre style="margin: 0; white-space: pre-wrap; color: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; line-height: 1.5;">@ConvertUtils.ParseAndMergeStreamResponse(LogData.ResponseBody)</pre>
                         </div>
                     </div>
                 </TabPane>
@@ -427,122 +430,6 @@
     }
 
     /// <summary>
-    /// 解析流式响应并合并内容
-    /// </summary>
-    private string ParseAndMergeStreamResponse(string? responseBody)
-    {
-        if (string.IsNullOrEmpty(responseBody))
-            return "";
-
-        try
-        {
-            var lines = responseBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var contentBuilder = new System.Text.StringBuilder();
-            var reasoningContentBuilder = new System.Text.StringBuilder();
-            string? chatId = null;
-            string? modelName = null;
-            int lineIndex = 0;
-            
-            foreach (var line in lines)
-            {
-                var trimmedLine = line.Trim();
-                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("data: [DONE]"))
-                    continue;
-                    
-                lineIndex++;
-                
-                // 移除 "data: " 前缀
-                if (trimmedLine.StartsWith("data: "))
-                {
-                    trimmedLine = trimmedLine.Substring(6);
-                }
-                
-                try
-                {
-                    var json = JObject.Parse(trimmedLine);
-                    
-                    // 从第二条消息开始解析id和model（第一条通常为空）
-                    if (lineIndex >= 2)
-                    {
-                        if (chatId == null && json.TryGetValue("id", out var idElement) && idElement.Type == JTokenType.String)
-                        {
-                            chatId = idElement.Value<string>();
-                        }
-                        
-                        if (modelName == null && json.TryGetValue("model", out var modelElement) && modelElement.Type == JTokenType.String)
-                        {
-                            modelName = modelElement.Value<string>();
-                        }
-                    }
-                    
-                    // 检查是否有choices数组
-                    if (json.TryGetValue("choices", out var choicesToken) && choicesToken.Type == JTokenType.Array)
-                    {
-                        var choices = choicesToken as JArray;
-                        foreach (var choice in choices)
-                        {
-                            // 流式响应只提取 delta 中的内容，避免重复
-                            if (choice is JObject choiceObj && choiceObj.TryGetValue("delta", out var deltaToken) && deltaToken is JObject delta)
-                            {
-                                if (delta.TryGetValue("content", out var contentToken) && contentToken.Type == JTokenType.String)
-                                {
-                                    contentBuilder.Append(contentToken.Value<string>());
-                                }
-                                
-                                if (delta.TryGetValue("reasoning_content", out var reasoningContentToken) && reasoningContentToken.Type == JTokenType.String)
-                                {
-                                    reasoningContentBuilder.Append(reasoningContentToken.Value<string>());
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Newtonsoft.Json.JsonException)
-                {
-                    // 忽略无法解析的行
-                    continue;
-                }
-            }
-            
-            // 构建标准的ChatCompletion响应格式，包含合并后的内容
-            var mergedResponse = new
-            {
-                id = chatId ?? "merged-response",
-                model = modelName ?? "merged-stream",
-                @object = "chat.completion",
-                choices = new[]
-                {
-                    new
-                    {
-                        index = 0,
-                        message = new
-                        {
-                            role = "assistant",
-                            content = contentBuilder.ToString(),
-                            reasoning_content = reasoningContentBuilder.ToString()
-                        },
-                        finish_reason = "stop"
-                    }
-                },
-                usage = new
-                {
-                    content_length = contentBuilder.Length,
-                    reasoning_content_length = reasoningContentBuilder.Length,
-                    total_chunks_merged = lineIndex
-                },
-                created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                merged_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-            };
-            
-            return JsonConvert.SerializeObject(mergedResponse, Formatting.Indented);
-        }
-        catch (Exception ex)
-        {
-            return $"解析流式响应失败: {ex.Message}";
-        }
-    }
-
-    /// <summary>
     /// 解码Unicode转义字符串
     /// </summary>
     private string DecodeUnicodeString(string input)
@@ -561,4 +448,4 @@
             return input;
         }
     }
-} 
+}

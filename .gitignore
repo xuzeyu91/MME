@@ -362,6 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /MME/appsettings.Development.json
-/MME/MME.db
-/src/MME/MME.db
-/src/MME/appsettings.Development.json
+/MME/mme.db

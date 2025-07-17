@@ -1,4 +1,6 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Text;
 
 namespace MME.Domain
 {
@@ -258,6 +260,174 @@ namespace MME.Domain
             {
                 Console.WriteLine(ex.ToString());
                 return "";
+            }
+        }
+
+        /// <summary>
+        /// 解析流式响应并合并内容
+        /// </summary>
+        /// <param name="responseBody">流式响应体</param>
+        /// <returns>合并后的JSON格式响应</returns>
+        public static string ParseAndMergeStreamResponse(string? responseBody)
+        {
+            if (string.IsNullOrEmpty(responseBody))
+                return "";
+
+            try
+            {
+                var lines = responseBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var contentBuilder = new StringBuilder();
+                var reasoningContentBuilder = new StringBuilder();
+                var reasoningBuilder = new StringBuilder();
+                var toolCallsList = new List<object>();
+                string? chatId = null;
+                string? modelName = null;
+                int lineIndex = 0;
+                
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("data: [DONE]"))
+                        continue;
+                        
+                    lineIndex++;
+                    
+                    // 移除 "data: " 前缀
+                    if (trimmedLine.StartsWith("data: "))
+                    {
+                        trimmedLine = trimmedLine.Substring(6);
+                    }
+                    
+                    try
+                    {
+                        var json = JObject.Parse(trimmedLine);
+                        
+                        // 从第二条消息开始解析id和model（第一条通常为空）
+                        if (lineIndex >= 2)
+                        {
+                            if (chatId == null && json.TryGetValue("id", out var idElement) && idElement.Type == JTokenType.String)
+                            {
+                                chatId = idElement.Value<string>();
+                            }
+                            
+                            if (modelName == null && json.TryGetValue("model", out var modelElement) && modelElement.Type == JTokenType.String)
+                            {
+                                modelName = modelElement.Value<string>();
+                            }
+                        }
+                        
+                        // 检查是否有choices数组
+                        if (json.TryGetValue("choices", out var choicesToken) && choicesToken.Type == JTokenType.Array)
+                        {
+                            var choices = choicesToken as JArray;
+                            if (choices != null)
+                            {
+                                foreach (var choice in choices)
+                                {
+                                    // 流式响应只提取 delta 中的内容，避免重复
+                                    if (choice is JObject choiceObj && choiceObj.TryGetValue("delta", out var deltaToken) && deltaToken is JObject delta)
+                                    {
+                                        // 提取 content
+                                        if (delta.TryGetValue("content", out var contentToken) && contentToken.Type == JTokenType.String)
+                                        {
+                                            contentBuilder.Append(contentToken.Value<string>());
+                                        }
+                                        
+                                        // 提取 reasoning_content（兼容形式）
+                                        if (delta.TryGetValue("reasoning_content", out var reasoningContentToken) && reasoningContentToken.Type == JTokenType.String)
+                                        {
+                                            reasoningContentBuilder.Append(reasoningContentToken.Value<string>());
+                                        }
+                                        
+                                        // 提取 reasoning
+                                        if (delta.TryGetValue("reasoning", out var reasoningToken) && reasoningToken.Type == JTokenType.String)
+                                        {
+                                            reasoningBuilder.Append(reasoningToken.Value<string>());
+                                        }
+                                        
+                                        // 提取 tool_calls
+                                        if (delta.TryGetValue("tool_calls", out var toolCallsToken) && toolCallsToken.Type == JTokenType.Array)
+                                        {
+                                            var toolCalls = toolCallsToken as JArray;
+                                            if (toolCalls != null)
+                                            {
+                                                foreach (var toolCall in toolCalls)
+                                                {
+                                                    if (toolCall is JObject)
+                                                    {
+                                                        toolCallsList.Add(toolCall);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // 忽略无法解析的行
+                        continue;
+                    }
+                }
+                
+                // 构建标准的ChatCompletion响应格式，包含合并后的内容
+                var messageContent = new Dictionary<string, object>
+                {
+                    ["role"] = "assistant",
+                    ["content"] = contentBuilder.ToString()
+                };
+                
+                // 添加reasoning_content（如果有）
+                if (reasoningContentBuilder.Length > 0)
+                {
+                    messageContent["reasoning_content"] = reasoningContentBuilder.ToString();
+                }
+                
+                // 添加reasoning（如果有）
+                if (reasoningBuilder.Length > 0)
+                {
+                    messageContent["reasoning"] = reasoningBuilder.ToString();
+                }
+                
+                // 添加tool_calls（如果有）
+                if (toolCallsList.Any())
+                {
+                    messageContent["tool_calls"] = toolCallsList.ToArray();
+                }
+                
+                var mergedResponse = new
+                {
+                    id = chatId ?? "merged-response",
+                    model = modelName ?? "merged-stream",
+                    @object = "chat.completion",
+                    choices = new[]
+                    {
+                        new
+                        {
+                            index = 0,
+                            message = messageContent,
+                            finish_reason = "stop"
+                        }
+                    },
+                    usage = new
+                    {
+                        content_length = contentBuilder.Length,
+                        reasoning_content_length = reasoningContentBuilder.Length,
+                        reasoning_length = reasoningBuilder.Length,
+                        tool_calls_count = toolCallsList.Count,
+                        total_chunks_merged = lineIndex
+                    },
+                    created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    merged_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                };
+                
+                return JsonConvert.SerializeObject(mergedResponse, Formatting.Indented);
+            }
+            catch (Exception ex)
+            {
+                return $"解析流式响应失败: {ex.Message}";
             }
         }
 
