@@ -39,10 +39,10 @@
                     </div>
                 </div>
             </AntDesign.Column>
-            <AntDesign.Column Title="状态" DataIndex="IsEnabled" TData="bool" Width="80">
+            <AntDesign.Column Title="状态" DataIndex="IsEnabled" TData="bool" Width="50">
                 <Switch Value="@context.IsEnabled" OnChange="(value) => ToggleConfig(context.Id, value)" />
             </AntDesign.Column>
-            <AntDesign.Column Title="支持接口" TData="string" Width="150">
+            <AntDesign.Column Title="支持接口" TData="string" Width="180">
                 <div style="max-height: 60px; overflow-y: auto;">
                     @{
                         var paths = GetSupportedPathsDisplay(context.SupportedPaths);
