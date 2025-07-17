@@ -21,12 +21,12 @@
     <Card>
         <Table DataSource="@configs" TItem="MME.Domain.Repositories.ProxyConfig" Loading="@loading" Bordered ScrollX="1400">
             <AntDesign.Column Title="配置名称" DataIndex="Name" TData="string" Width="120" />
-            <AntDesign.Column Title="目标地址" DataIndex="TargetUrl" TData="string" Width="200">
+            <AntDesign.Column Title="目标地址" DataIndex="TargetUrl" TData="string" Width="150">
                 <Text Code>@context.TargetUrl</Text>
             </AntDesign.Column>
-            <AntDesign.Column Title="Bearer Token" DataIndex="BearerToken" TData="string" Width="200">
+            <AntDesign.Column Title="Bearer Token" DataIndex="BearerToken" TData="string" Width="250">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <Text Code Copyable>@context.BearerToken</Text>
+                    <Text Code>@context.BearerToken</Text>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
                         <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
                                 Icon="copy" OnClick="() => CopyToken(context.BearerToken)">
