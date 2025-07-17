@@ -26,12 +26,8 @@
             </AntDesign.Column>
             <AntDesign.Column Title="Bearer Token" DataIndex="BearerToken" TData="string" Width="250">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <Text Code>@context.BearerToken</Text>
+                    <Text Code Copyable>@context.BearerToken</Text>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
-                                Icon="copy" OnClick="() => CopyToken(context.BearerToken)">
-                            复制
-                        </Button>
                         <Button Type="@ButtonType.Link" Size="@ButtonSize.Small" 
                                 Icon="reload" OnClick="() => RefreshToken(context.Id)">
                             刷新
@@ -429,19 +425,6 @@
         catch (Exception ex)
         {
             try { _= MessageService.Error($"刷新失败：{ex.Message}"); } catch { }
-        }
-    }
-
-    private async Task CopyToken(string token)
-    {
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", token);
-            try { _ = MessageService.Success("API密钥已复制到剪贴板"); } catch { }
-        }
-        catch (Exception ex)
-        {
-            try { _ = MessageService.Error($"复制失败：{ex.Message}"); } catch { }
         }
     }
 
