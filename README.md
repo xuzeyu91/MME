@@ -157,10 +157,6 @@ cd MME
 wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.yaml
 wget https://raw.githubusercontent.com/xuzeyu91/MME/main/appsettings.Production.json
 
-# 如果只想使用配置文件方式（不使用环境变量）
-wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.config.yaml
-mv docker-compose.config.yaml docker-compose.yaml
-
 # 如果想使用 SQLite 快速体验（无需 PostgreSQL 数据库）
 wget https://raw.githubusercontent.com/xuzeyu91/MME/main/docker-compose.sqlite.yaml
 mv docker-compose.sqlite.yaml docker-compose.yaml
