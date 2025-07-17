@@ -365,3 +365,4 @@ FodyWeavers.xsd
 /MME/MME.db
 /src/MME/MME.db
 /src/MME/appsettings.Development.json
+/src/MME/Properties/launchSettings.json
