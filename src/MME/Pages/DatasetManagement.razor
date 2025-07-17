@@ -2,6 +2,7 @@
 @using MME.Domain.Repositories.Dataset
 @using MME.Domain.Services
 @using MME.Domain.Model
+@using MME.Domain
 @using AntDesign
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
@@ -756,126 +757,6 @@
     }
 
     /// <summary>
-    /// 解析流式响应并合并内容
-    /// </summary>
-    private string ParseAndMergeStreamResponse(string? responseBody)
-    {
-        if (string.IsNullOrEmpty(responseBody))
-            return "";
-
-        try
-        {
-            var lines = responseBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var contentBuilder = new System.Text.StringBuilder();
-            var reasoningContentBuilder = new System.Text.StringBuilder();
-            string? chatId = null;
-            string? modelName = null;
-            int lineIndex = 0;
-            
-            foreach (var line in lines)
-            {
-                var trimmedLine = line.Trim();
-                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("data: [DONE]"))
-                    continue;
-                    
-                lineIndex++;
-                
-                // 移除 "data: " 前缀
-                if (trimmedLine.StartsWith("data: "))
-                {
-                    trimmedLine = trimmedLine.Substring(6);
-                }
-                
-                try
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(trimmedLine);
-                    var root = doc.RootElement;
-                    
-                    // 从第二条消息开始解析id和model（第一条通常为空）
-                    if (lineIndex >= 2)
-                    {
-                        if (chatId == null && root.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
-                        {
-                            chatId = idElement.GetString();
-                        }
-                        
-                        if (modelName == null && root.TryGetProperty("model", out var modelElement) && modelElement.ValueKind == JsonValueKind.String)
-                        {
-                            modelName = modelElement.GetString();
-                        }
-                    }
-                    
-                    // 检查是否有choices数组
-                    if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var choice in choices.EnumerateArray())
-                        {
-                            // 流式响应只提取 delta 中的内容，避免重复
-                            if (choice.TryGetProperty("delta", out var delta))
-                            {
-                                if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-                                {
-                                    contentBuilder.Append(content.GetString());
-                                }
-                                
-                                if (delta.TryGetProperty("reasoning_content", out var reasoningContent) && reasoningContent.ValueKind == JsonValueKind.String)
-                                {
-                                    reasoningContentBuilder.Append(reasoningContent.GetString());
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (JsonException)
-                {
-                    // 忽略无法解析的行
-                    continue;
-                }
-            }
-            
-            // 构建标准的ChatCompletion响应格式，包含合并后的内容
-            var mergedResponse = new
-            {
-                id = chatId ?? "merged-response",
-                model = modelName ?? "merged-stream",
-                @object = "chat.completion",
-                choices = new[]
-                {
-                    new
-                    {
-                        index = 0,
-                        message = new
-                        {
-                            role = "assistant",
-                            content = contentBuilder.ToString(),
-                            reasoning_content = reasoningContentBuilder.ToString()
-                        },
-                        finish_reason = "stop"
-                    }
-                },
-                usage = new
-                {
-                    content_length = contentBuilder.Length,
-                    reasoning_content_length = reasoningContentBuilder.Length,
-                    total_chunks_merged = lineIndex
-                },
-                created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                merged_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-            };
-            
-            return System.Text.Json.JsonSerializer.Serialize(mergedResponse, new System.Text.Json.JsonSerializerOptions 
-            { 
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            });
-        }
-        catch (Exception ex)
-        {
-            return $"解析流式响应失败: {ex.Message}";
-        }
-    }
-
-    /// <summary>
     /// 处理数据集项的响应内容：如果来源是流式请求则合并，否则返回原始内容
     /// </summary>
     private string GetProcessedDatasetItemResponse(DatasetItemDto item)
@@ -890,7 +771,7 @@
         if (IsStreamResponseFormat(item.ExpectedOutput))
         {
             // 流式响应：使用合并逻辑
-            return ParseAndMergeStreamResponse(item.ExpectedOutput);
+            return ConvertUtils.ParseAndMergeStreamResponse(item.ExpectedOutput);
         }
         else
         {
