@@ -128,5 +128,15 @@ namespace MME.Components
             var authProvider = (MMEAuthProvider)AuthenticationStateProvider;
             await authProvider.SignOut();
         }
+
+        /// <summary>
+        /// 获取用户名，处理空引用情况
+        /// </summary>
+        /// <param name="context">认证上下文</param>
+        /// <returns>用户名或默认显示文本</returns>
+        private string GetUserName(Microsoft.AspNetCore.Components.Authorization.AuthenticationState? context)
+        {
+            return context?.User?.Identity?.Name ?? "用户";
+        }
     }
 }
