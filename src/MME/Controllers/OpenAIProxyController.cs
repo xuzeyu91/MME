@@ -105,7 +105,8 @@ public class OpenAIProxyController : ControllerBase
             // 添加请求体
             if (!string.IsNullOrEmpty(requestBody))
             {
-                request.Content = new StringContent(requestBody, Encoding.UTF8, Request.ContentType ?? "application/json");
+                var mediaType = Request.ContentType?.Split(';')[0].Trim() ?? "application/json";
+                request.Content = new StringContent(requestBody, Encoding.UTF8, mediaType);
             }
 
             // 复制请求头（排除某些头）
