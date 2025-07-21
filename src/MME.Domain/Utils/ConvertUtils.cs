@@ -283,6 +283,9 @@ namespace MME.Domain
                 string? chatId = null;
                 string? modelName = null;
                 int lineIndex = 0;
+                int totalPromptTokens = 0;
+                int totalCompletionTokens = 0;
+                int totalTokens = 0;
                 
                 foreach (var line in lines)
                 {
@@ -313,6 +316,25 @@ namespace MME.Domain
                             if (modelName == null && json.TryGetValue("model", out var modelElement) && modelElement.Type == JTokenType.String)
                             {
                                 modelName = modelElement.Value<string>();
+                            }
+                        }
+                        
+                        // 提取usage信息并更新
+                        if (json.TryGetValue("usage", out var usageToken) && usageToken is JObject usage)
+                        {
+                            if (usage.TryGetValue("prompt_tokens", out var promptTokensToken) && promptTokensToken.Type == JTokenType.Integer)
+                            {
+                                totalPromptTokens = promptTokensToken.Value<int>();
+                            }
+                            
+                            if (usage.TryGetValue("completion_tokens", out var completionTokensToken) && completionTokensToken.Type == JTokenType.Integer)
+                            {
+                                totalCompletionTokens = completionTokensToken.Value<int>();
+                            }
+                            
+                            if (usage.TryGetValue("total_tokens", out var totalTokensToken) && totalTokensToken.Type == JTokenType.Integer)
+                            {
+                                totalTokens = totalTokensToken.Value<int>();
                             }
                         }
                         
@@ -413,6 +435,9 @@ namespace MME.Domain
                     },
                     usage = new
                     {
+                        prompt_tokens = totalPromptTokens,
+                        completion_tokens = totalCompletionTokens,
+                        total_tokens = totalTokens,
                         content_length = contentBuilder.Length,
                         reasoning_content_length = reasoningContentBuilder.Length,
                         reasoning_length = reasoningBuilder.Length,
