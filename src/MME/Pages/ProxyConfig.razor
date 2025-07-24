@@ -10,7 +10,7 @@
 <PageTitle>代理配置管理</PageTitle>
 
 <div class="page-container">
-    <PageHeader Title="代理配置管理" SubTitle="管理OpenAI API代理配置">
+    <PageHeader Title="代理配置管理" SubTitle="管理HTTP API代理配置，支持全站代理和特定路径代理">
         <PageHeaderExtra>
             <Button Type="@ButtonType.Primary" Icon="plus" OnClick="ShowCreateModal">
                 添加配置
@@ -38,14 +38,32 @@
             <AntDesign.Column Title="状态" DataIndex="IsEnabled" TData="bool" Width="50">
                 <Switch Value="@context.IsEnabled" OnChange="(value) => ToggleConfig(context.Id, value)" />
             </AntDesign.Column>
-            <AntDesign.Column Title="支持接口" TData="string" Width="180">
+            <AntDesign.Column Title="代理模式" TData="string" Width="180">
                 <div style="max-height: 60px; overflow-y: auto;">
                     @{
-                        var paths = GetSupportedPathsDisplay(context.SupportedPaths);
+                        var proxyModeInfo = GetProxyModeDisplay(context.SupportedPaths);
                     }
-                    @foreach (var path in paths)
+                    @if (proxyModeInfo.IsFullSite)
                     {
-                        <Tag Style="margin: 2px; font-size: 12px;">@path</Tag>
+                        <Tag Color="@("green")" Style="margin: 2px; font-size: 12px;">
+                            <Icon Type="global" Style="margin-right: 4px;" />
+                            全站代理
+                        </Tag>
+                    }
+                    else
+                    {
+                        <Tag Color="@("blue")" Style="margin: 2px; font-size: 12px;">
+                            <Icon Type="api" Style="margin-right: 4px;" />
+                            特定路径
+                        </Tag>
+                        @foreach (var path in proxyModeInfo.Paths.Take(3))
+                        {
+                            <Tag Style="margin: 2px; font-size: 12px;">@path</Tag>
+                        }
+                        @if (proxyModeInfo.Paths.Length > 3)
+                        {
+                            <Tag Style="margin: 2px; font-size: 12px;">+@(proxyModeInfo.Paths.Length - 3)更多</Tag>
+                        }
                     }
                 </div>
             </AntDesign.Column>
@@ -184,23 +202,76 @@
             </Col>
         </Row>
         
-        <!-- 接口配置 -->
+        <!-- 代理配置 -->
         <Divider>
             <Text Strong Style="color: #7F7FFF;">
-                <Icon Type="api" Style="margin-right: 8px;" />
-                支持的接口
+                <Icon Type="global" Style="margin-right: 8px;" />
+                代理模式配置
             </Text>
         </Divider>
         
-        <FormItem Label="接口列表" LabelCol="new ColLayoutParam { Span = 4 }" WrapperCol="new ColLayoutParam { Span = 20 }">
+        <FormItem Label="代理模式" LabelCol="new ColLayoutParam { Span = 4 }" WrapperCol="new ColLayoutParam { Span = 20 }">
             <div>
-                <CheckboxGroup @bind-Value="@selectedPaths" Options="@pathOptions" />
+                <RadioGroup @bind-Value="@proxyMode" ButtonStyle="@RadioButtonStyle.Solid">
+                    <Radio RadioButton Value="@("full-site")">
+                        <Icon Type="global" Style="margin-right: 4px;" />
+                        全站代理
+                    </Radio>
+                    <Radio RadioButton Value="@("specific-paths")">
+                        <Icon Type="api" Style="margin-right: 4px;" />
+                        特定路径
+                    </Radio>
+                </RadioGroup>
                 <div style="color: #8c8c8c; font-size: 12px; margin-top: 8px;">
                     <Icon Type="info-circle" Style="margin-right: 4px;" />
-                    选择此配置支持的API接口类型
+                    全站代理：代理目标站点的所有请求；特定路径：仅代理指定的API路径
                 </div>
             </div>
         </FormItem>
+        
+        @if (proxyMode == "specific-paths")
+        {
+            <FormItem Label="自定义路径" LabelCol="new ColLayoutParam { Span = 4 }" WrapperCol="new ColLayoutParam { Span = 20 }">
+                <div>
+                    <div style="margin-bottom: 12px;">
+                        <Text Strong>常用API路径：</Text>
+                        <CheckboxGroup @bind-Value="@selectedPaths" Options="@pathOptions" />
+                    </div>
+                    
+                    <div>
+                        <Text Strong>自定义路径：</Text>
+                        <div style="margin-top: 8px;">
+                            <Input.Group Compact>
+                                <Input @bind-Value="@customPath" 
+                                       Placeholder="输入自定义路径，如：/api/v1/custom" 
+                                       Style="width: calc(100% - 80px)" 
+                                       OnPressEnter="AddCustomPath" />
+                                <Button Type="@ButtonType.Primary" OnClick="AddCustomPath" Icon="plus">
+                                    添加
+                                </Button>
+                            </Input.Group>
+                        </div>
+                        
+                        @if (customPaths.Any())
+                        {
+                            <div style="margin-top: 12px;">
+                                @foreach (var path in customPaths)
+                                {
+                                    <Tag Closable OnClose="@(() => RemoveCustomPath(path))" Style="margin: 4px;">
+                                        @path
+                                    </Tag>
+                                }
+                            </div>
+                        }
+                    </div>
+                    
+                    <div style="color: #8c8c8c; font-size: 12px; margin-top: 8px;">
+                        <Icon Type="info-circle" Style="margin-right: 4px;" />
+                        可以选择常用API路径或添加自定义路径，支持通配符匹配
+                    </div>
+                </div>
+            </FormItem>
+        }
         
     </Form>
 </Modal>
@@ -212,7 +283,10 @@
     private bool modalLoading = false;
     private MME.Domain.Repositories.ProxyConfig? editingConfig = null;
     private ConfigForm configForm = new();
-    private string[] selectedPaths = { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+    private string[] selectedPaths = Array.Empty<string>();
+    private string proxyMode = "full-site"; // "full-site" 或 "specific-paths"
+    private string customPath = string.Empty;
+    private List<string> customPaths = new();
 
     private CheckboxOption<string>[] pathOptions = new[]
     {
@@ -220,7 +294,11 @@
         new CheckboxOption<string> { Label = "Embeddings", Value = "/v1/embeddings" },
         new CheckboxOption<string> { Label = "Rerank", Value = "/v1/rerank" },
         new CheckboxOption<string> { Label = "Models", Value = "/v1/models" },
-        new CheckboxOption<string> { Label = "Fine-tuning", Value = "/v1/fine_tuning/jobs" }
+        new CheckboxOption<string> { Label = "Fine-tuning", Value = "/v1/fine_tuning/jobs" },
+        new CheckboxOption<string> { Label = "Images", Value = "/v1/images" },
+        new CheckboxOption<string> { Label = "Audio", Value = "/v1/audio" },
+        new CheckboxOption<string> { Label = "Files", Value = "/v1/files" },
+        new CheckboxOption<string> { Label = "Assistants", Value = "/v1/assistants" }
     };
 
     protected override async Task OnInitializedAsync()
@@ -273,7 +351,10 @@
     {
         editingConfig = null;
         configForm = new ConfigForm();
-        selectedPaths = new[] { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+        proxyMode = "full-site";
+        selectedPaths = Array.Empty<string>();
+        customPaths.Clear();
+        customPath = string.Empty;
         modalVisible = true;
     }
 
@@ -292,13 +373,58 @@
             LogResponseBody = config.LogResponseBody
         };
         
+        // 解析代理模式和路径
+        customPaths.Clear();
+        customPath = string.Empty;
+        
         try
         {
-            selectedPaths = System.Text.Json.JsonSerializer.Deserialize<string[]>(config.SupportedPaths) ?? new string[0];
+            if (string.IsNullOrEmpty(config.SupportedPaths) || config.SupportedPaths == "[]")
+            {
+                // 空配置或空数组表示全站代理
+                proxyMode = "full-site";
+                selectedPaths = Array.Empty<string>();
+            }
+            else
+            {
+                var paths = System.Text.Json.JsonSerializer.Deserialize<string[]>(config.SupportedPaths) ?? Array.Empty<string>();
+                
+                if (paths.Length == 0 || (paths.Length == 1 && paths[0] == "*"))
+                {
+                    // 通配符或空数组表示全站代理
+                    proxyMode = "full-site";
+                    selectedPaths = Array.Empty<string>();
+                }
+                else
+                {
+                    // 特定路径代理
+                    proxyMode = "specific-paths";
+                    
+                    // 分离预定义路径和自定义路径
+                    var predefinedPaths = pathOptions.Select(p => p.Value).ToHashSet();
+                    var selectedList = new List<string>();
+                    
+                    foreach (var path in paths)
+                    {
+                        if (predefinedPaths.Contains(path))
+                        {
+                            selectedList.Add(path);
+                        }
+                        else
+                        {
+                            customPaths.Add(path);
+                        }
+                    }
+                    
+                    selectedPaths = selectedList.ToArray();
+                }
+            }
         }
         catch
         {
-            selectedPaths = new[] { "/v1/chat/completions", "/v1/embeddings", "/v1/rerank" };
+            // 解析失败时默认为全站代理
+            proxyMode = "full-site";
+            selectedPaths = Array.Empty<string>();
         }
         
         modalVisible = true;
@@ -326,7 +452,19 @@
 
         try
         {
-            var supportedPathsJson = System.Text.Json.JsonSerializer.Serialize(selectedPaths);
+            string supportedPathsJson;
+            
+            if (proxyMode == "full-site")
+            {
+                // 全站代理使用通配符
+                supportedPathsJson = System.Text.Json.JsonSerializer.Serialize(new[] { "*" });
+            }
+            else
+            {
+                // 特定路径代理，合并预定义路径和自定义路径
+                var allPaths = selectedPaths.Concat(customPaths).Distinct().ToArray();
+                supportedPathsJson = System.Text.Json.JsonSerializer.Serialize(allPaths);
+            }
             
             if (editingConfig == null)
             {
@@ -384,6 +522,10 @@
         modalVisible = false;
         configForm = new ConfigForm();
         editingConfig = null;
+        proxyMode = "full-site";
+        selectedPaths = Array.Empty<string>();
+        customPaths.Clear();
+        customPath = string.Empty;
     }
 
     private async Task DeleteConfig(Guid id)
@@ -428,20 +570,42 @@
         }
     }
 
-    private string[] GetSupportedPathsDisplay(string supportedPaths)
+    private (bool IsFullSite, string[] Paths) GetProxyModeDisplay(string supportedPaths)
     {
         try
         {
             if (string.IsNullOrEmpty(supportedPaths))
-                return new string[0];
+                return (true, Array.Empty<string>());
                 
-            var paths = System.Text.Json.JsonSerializer.Deserialize<string[]>(supportedPaths) ?? new string[0];
-            return paths.Select(p => p.Replace("/v1/", "")).ToArray();
+            var paths = System.Text.Json.JsonSerializer.Deserialize<string[]>(supportedPaths) ?? Array.Empty<string>();
+            
+            if (paths.Length == 0 || (paths.Length == 1 && paths[0] == "*"))
+            {
+                return (true, Array.Empty<string>());
+            }
+            
+            // 显示时去掉 /v1/ 前缀，让路径更简洁
+            var displayPaths = paths.Select(p => p.StartsWith("/v1/") ? p.Substring(4) : p).ToArray();
+            return (false, displayPaths);
         }
         catch
         {
-            return new string[0];
+            return (true, Array.Empty<string>());
         }
+    }
+    
+    private void AddCustomPath()
+    {
+        if (!string.IsNullOrWhiteSpace(customPath) && !customPaths.Contains(customPath))
+        {
+            customPaths.Add(customPath.Trim());
+            customPath = string.Empty;
+        }
+    }
+    
+    private void RemoveCustomPath(string path)
+    {
+        customPaths.Remove(path);
     }
 
     public class ConfigForm
