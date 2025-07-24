@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mme:
-    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.1
+    image: registry.cn-hangzhou.aliyuncs.com/xuzeyu91/mme:v0.1.2
     container_name: mme-app
     environment:
       # 应用配置
