@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /MME/appsettings.Development.json
 /MME/mme.db
+/src/MME/mme.db
