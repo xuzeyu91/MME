@@ -196,8 +196,8 @@ public class OpenAIProxyController : ControllerBase
     /// </summary>
     private static bool IsPathSupported(string supportedPaths, string requestPath)
     {
-        // 只要是 /v1 开头的路径都支持
-        return requestPath.StartsWith("/v1", StringComparison.OrdinalIgnoreCase);
+        // 允许代理所有路径
+        return true;
     }
 
     /// <summary>
