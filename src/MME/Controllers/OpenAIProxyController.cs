@@ -196,22 +196,8 @@ public class OpenAIProxyController : ControllerBase
     /// </summary>
     private static bool IsPathSupported(string supportedPaths, string requestPath)
     {
-        try
-        {
-            if (string.IsNullOrEmpty(supportedPaths))
-                return false;
-
-            var pathArray = JsonSerializer.Deserialize<string[]>(supportedPaths);
-            if (pathArray == null || pathArray.Length == 0)
-                return false;
-
-            return pathArray.Any(path => requestPath.StartsWith(path, StringComparison.OrdinalIgnoreCase));
-        }
-        catch
-        {
-            // 解析失败，默认不支持
-            return false;
-        }
+        // 只要是 /v1 开头的路径都支持
+        return requestPath.StartsWith("/v1", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
